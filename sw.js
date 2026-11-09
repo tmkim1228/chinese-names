@@ -1,4 +1,4 @@
-const CACHE = "name-dictionary-v1.6-20261107";
+const CACHE = "name-dictionary-v1.7-20261109";
 const FILES = [
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const FILES = [
   "./data/names.json",
   "./data/meta.json",
   "./data/dictionary.json",
+  "./data/ko-glosses.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/maskable-192.png",

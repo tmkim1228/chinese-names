@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#1b3a5a" />
-  <title>중국 이름 배우기 v1.6</title>
+  <title>중국 이름 배우기 v1.7</title>
   <link rel="stylesheet" href="styles.css" />
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="이름옥편"><meta name="mobile-web-app-capable" content="yes"></head>
 <body>
@@ -12,7 +12,7 @@
     <div class="brand">
       <span class="logo">名</span>
       <div>
-        <h1>중국 이름 배우기 <small>v1.6</small></h1>
+        <h1>중국 이름 배우기 <small>v1.7</small></h1>
         <p class="sub">중국 한자·이름·문서 옥편 · 오프라인 사전</p>
       </div>
     </div>
@@ -56,7 +56,7 @@
       <ul>
         <li><strong>이름</strong> — 병음(wang xiaoming)이나 한글 독음(왕소명)으로 중국 이름을 찾고 조립합니다.</li>
         <li><strong>한자 · 병음 · 한글</strong> — 글자·병음·한국 독음/훈음으로 옥편을 찾습니다.</li>
-        <li><strong>문서</strong> — 회사 문서 등 중국어 글을 붙여 넣어 단어 병음·독음·영어 뜻을 봅니다. 단어 사전은 이 탭을 처음 열 때 내려받습니다.</li>
+        <li><strong>문서</strong> — 회사 문서 등 중국어 글을 붙여 넣어 단어 병음·독음·한국어 뜻(앱 작성)을 봅니다. 없는 단어는 영어 뜻과 글자 훈음으로 보완합니다. 단어 사전은 이 탭을 처음 열 때 내려받습니다. 「AI에게 묻기」는 설명을 요청할 문장만 복사하며, 문서는 어디에도 보내지 않습니다.</li>
         <li><strong>복습</strong> — 저장한 이름·글자·단어를 다시 보고 플래시카드로 익힙니다. 목록은 이 브라우저에만 남으니 JSON으로 백업하세요.</li>
       </ul>
       <p class="hint">휴대폰이나 컴퓨터에 설치하면 홈 화면에서 앱처럼 열 수 있습니다.</p>
@@ -91,19 +91,30 @@
       <textarea id="doc-input" rows="7" spellcheck="false" placeholder="예: 本公司将于下周召开董事会会议，讨论银行贷款和会计报表。请各部门负责人准时参加。"></textarea>
       <div class="doc-toolbar">
         <button type="button" id="doc-analyze" class="primary">분석</button>
+        <button type="button" id="doc-ask-ai" class="ghost">AI에게 묻기</button>
         <button type="button" id="doc-speak" class="ghost">문장 읽기</button>
         <label><input type="checkbox" id="doc-toggle-py" checked /> 병음</label>
         <label><input type="checkbox" id="doc-toggle-eum" checked /> 독음</label>
         <label><input type="checkbox" id="doc-unknown-only" /> 모르는 항목만 강조</label>
       </div>
       <p id="doc-loading" class="status" hidden>단어 사전(CC-CEDICT)을 불러오는 중… 처음 한 번만 내려받으면 이후에는 오프라인에서도 쓸 수 있습니다.</p>
-      <p class="hint">단어를 누르면 영어 뜻(CC-CEDICT)·훈음·독음을 봅니다. 간체·번체, 숫자·영문·문장부호가 섞여 있어도 됩니다.</p>
+      <p class="hint">단어를 누르면 한국어 뜻(앱 작성)·영어 뜻(CC-CEDICT)·훈음·독음을 봅니다. 분석 후 아래에 단어 정리가 나타납니다. 「AI에게 묻기」는 번역·문맥 설명을 요청할 문장만 복사하며, 회사 문서는 어디에도 전송되지 않습니다. 간체·번체, 숫자·영문·문장부호가 섞여 있어도 됩니다.</p>
       <div class="examples">
+        <button type="button" class="ex doc-ex" data-q="快速上手多维表格">다차원 표 시작</button>
         <button type="button" class="ex doc-ex" data-q="本公司将于下周召开董事会会议，讨论银行贷款和会计报表。请各部门负责人准时参加。">간체 예문</button>
         <button type="button" class="ex doc-ex" data-q="本公司將於下週召開董事會會議，討論銀行貸款和會計報表。請各部門負責人準時參加。">번체 예문</button>
       </div>
     </section>
     <section id="doc-output" class="doc-output panel" hidden></section>
+    <section id="doc-summary" class="panel doc-summary" hidden>
+      <div class="doc-summary-head">
+        <h2>단어 정리</h2>
+        <div class="doc-summary-actions">
+          <button type="button" id="doc-copy-summary" class="ghost">목록 복사</button>
+        </div>
+      </div>
+      <ol id="doc-summary-list" class="doc-summary-list"></ol>
+    </section>
     <section id="doc-unknown" class="panel" hidden>
       <h2>복습 목록에 없는 항목</h2>
       <p class="hint">아래에서 단어나 글자를 누르면 뜻을 확인하고 저장할 수 있습니다.</p>

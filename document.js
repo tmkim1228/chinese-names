@@ -56,6 +56,9 @@
   let index = new Map();
   let maxLen = 8;
   let loadPromise = null;
+  let GLOSS = null;
+  let glossMeta = null;
+  let glossPromise = null;
 
   async function fetchWords() {
     if (window.__WORDS__) return window.__WORDS__;
@@ -71,6 +74,42 @@
     const r = await fetch("data/words.json");
     if (!r.ok) throw new Error("words.json " + r.status);
     return r.json();
+  }
+
+  function buildGlosses(data) {
+    glossMeta = (data && data.meta) || null;
+    GLOSS = (data && data.g) ? data.g : (data || {});
+  }
+
+  async function fetchGlosses() {
+    if (window.__KOGLOSSES__) return window.__KOGLOSSES__;
+    if (typeof DecompressionStream === "function") {
+      try {
+        const r = await fetch("data/ko-glosses.json.gz");
+        if (r.ok) {
+          const stream = r.body.pipeThrough(new DecompressionStream("gzip"));
+          return JSON.parse(await new Response(stream).text());
+        }
+      } catch (err) { console.warn("ko-glosses.json.gz", err); }
+    }
+    const r = await fetch("data/ko-glosses.json");
+    if (!r.ok) throw new Error("ko-glosses.json " + r.status);
+    return r.json();
+  }
+
+  async function ensureGlosses() {
+    if (GLOSS) return GLOSS;
+    if (glossPromise) return glossPromise;
+    glossPromise = fetchGlosses().then((data) => {
+      buildGlosses(data);
+      return GLOSS;
+    }).catch((err) => {
+      glossPromise = null;
+      GLOSS = {};
+      console.warn("ko-glosses", err);
+      return GLOSS;
+    });
+    return glossPromise;
   }
 
   function buildIndex(data) {
@@ -101,7 +140,10 @@
     if (DATA) return DATA;
     if (loadPromise) return loadPromise;
     setLoading(true, "단어 사전(CC-CEDICT)을 불러오는 중… 처음 한 번만 내려받으면 이후에는 오프라인에서도 쓸 수 있습니다.");
-    loadPromise = fetchWords().then((data) => {
+    loadPromise = Promise.all([
+      fetchWords(),
+      ensureGlosses(),
+    ]).then(([data]) => {
       buildIndex(data);
       setLoading(false);
       return DATA;
@@ -297,6 +339,118 @@
     return "";
   }
 
+  function koGlossFor(tok) {
+    if (!GLOSS) return "";
+    const rec = tok && tok.rec;
+    const keys = [tok && tok.text, rec && rec.s, rec && rec.t];
+    const seen = new Set();
+    for (const k of keys) {
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      if (GLOSS[k]) return GLOSS[k];
+    }
+    return "";
+  }
+
+  function englishFallback(tok) {
+    const rec = tok && tok.rec;
+    if (rec && rec.d && rec.d.length) return rec.d[0];
+    return "";
+  }
+
+  function tokenEum(tok) {
+    const py = tokenPinyin(tok);
+    return alignedPair(tok.text, py).map(({ ch, syl }) => eumForChar(ch, syl) || "?").join("");
+  }
+
+  function displayPinyin(tok) {
+    return String(tokenPinyin(tok) || "").replace(/\s+/g, "");
+  }
+
+  function wordMeaning(tok) {
+    return koGlossFor(tok) || englishFallback(tok) || "뜻 자료 없음";
+  }
+
+  function formatWordLine(tok) {
+    const py = displayPinyin(tok) || "—";
+    const eum = tokenEum(tok) || "?";
+    return `${tok.text} ${py} (${eum}): ${wordMeaning(tok)}`;
+  }
+
+  function uniqueWordTokens() {
+    const out = [];
+    const seen = new Set();
+    tokens.forEach((tok, i) => {
+      if (tok.type !== "word") return;
+      const sig = `${tok.text}|${tokenPinyin(tok)}`;
+      if (seen.has(sig)) return;
+      seen.add(sig);
+      out.push({ tok, i });
+    });
+    return out;
+  }
+
+  function summaryText() {
+    return uniqueWordTokens().map(({ tok }) => formatWordLine(tok)).join("\n");
+  }
+
+  function buildAiPrompt() {
+    const src = (input.value || "").trim();
+    const lines = uniqueWordTokens().map(({ tok }) => "- " + formatWordLine(tok));
+    return [
+      "다음 중국어 글을 설명해 주세요.",
+      "",
+      "원문:",
+      src || "(비어 있음)",
+      "",
+      "1. 문장 전체를 자연스러운 한국어로 번역해 주세요.",
+      "2. 이런 문구가 보통 어디서 쓰이는지(어떤 앱·화면·문서인지 등) 문맥을 알려 주세요.",
+      "3. 단어별로 아래 형식으로 정리해 주세요. 한자, 성조 병음, 한국 독음, 뜻.",
+      "   예: 快速 kuàisù (쾌속): 빠르게",
+      "",
+      "앱에서 나눈 단어와 초안 뜻입니다. 더 자연스럽게 다듬어 주세요.",
+      ...(lines.length ? lines : ["- (분석된 단어가 없습니다)"]),
+    ].join("\n");
+  }
+
+  function showToast(msg) {
+    let t = document.getElementById("doc-toast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "doc-toast";
+      t.className = "doc-toast";
+      document.body.append(t);
+    }
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(showToast._tid);
+    showToast._tid = setTimeout(() => { t.hidden = true; }, 2400);
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (err) { console.warn("clipboard", err); }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.append(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch (err) {
+      console.warn("copy", err);
+      return false;
+    }
+  }
+
   function renderOutput() {
     if (!tokens.length) {
       output.hidden = true;
@@ -326,6 +480,25 @@
       </button>`;
     }).join("");
     renderUnknown(known);
+    renderSummary();
+  }
+
+  function renderSummary() {
+    const box = $("#doc-summary");
+    const list = $("#doc-summary-list");
+    if (!box || !list) return;
+    const rows = uniqueWordTokens();
+    if (!rows.length) {
+      box.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+    box.hidden = false;
+    list.innerHTML = rows.map(({ tok, i }) => {
+      const ko = koGlossFor(tok);
+      const src = ko ? "한국어 뜻" : "English";
+      return `<li><button type="button" class="doc-sum-item" data-tok="${i}"><span class="doc-sum-line">${esc(formatWordLine(tok))}</span> <small class="doc-sum-src">${src}</small></button></li>`;
+    }).join("");
   }
 
   function renderUnknown(known) {
@@ -426,6 +599,17 @@
     const readingHtml = readings.length
       ? readings.map((r) => `<p class="doc-reading"><span class="dict-py">${esc(r.p)}</span>${r.s !== simp || (r.t && r.t !== trad) ? ` · ${esc(r.s)}${r.t && r.t !== r.s ? " / " + esc(r.t) : ""}` : ""}<br>${(r.d || []).map((d) => esc(d)).join("<br>")}</p>`).join("")
       : "<p>CC-CEDICT에 이 단어 항목이 없습니다.</p>";
+    const ko = koGlossFor(tok);
+    const koHtml = ko
+      ? `<section class="doc-panel-defs doc-panel-ko">
+        <h3>한국어 뜻 · 앱 작성</h3>
+        <p class="doc-ko-gloss">${esc(ko)}</p>
+        <p class="dict-small">앱 작성자가 직접 적은 뜻입니다. 기존 중한사전을 베끼지 않았습니다.</p>
+      </section>`
+      : `<section class="doc-panel-defs doc-panel-ko">
+        <h3>한국어 뜻</h3>
+        <p>이 단어의 한국어 뜻은 아직 없습니다. 아래 영어 뜻과 글자별 훈음을 참고하세요.</p>
+      </section>`;
     const pairs = alignedPair(surface, py);
     const charHtml = pairs.map(({ ch, syl }) => {
       const info = charInfo(ch);
@@ -452,10 +636,11 @@
         <button class="ghost" data-doc-close>← 돌아가기</button>
       </div>
       <p class="dict-py">${esc(py || "병음 자료 없음")}</p>
+      ${koHtml}
       <section class="doc-panel-defs">
         <h3>영어 뜻 · CC-CEDICT</h3>
         ${readingHtml}
-        <p class="dict-small">영어 뜻은 CC-CEDICT(CC BY-SA 4.0, MDBG, ${esc(DATA?.meta?.date || "")})입니다. 한국어 뜻은 글자의 훈음입니다.</p>
+        <p class="dict-small">영어 뜻은 CC-CEDICT(CC BY-SA 4.0, MDBG, ${esc(DATA?.meta?.date || "")})입니다. 한국어 단어 뜻이 있으면 위에 앱 작성 주석으로 표시하고, 없으면 영어 뜻과 글자별 훈음으로 보완합니다.</p>
       </section>
       <h3 class="doc-sub">글자별 훈음 · 독음</h3>
       <div class="doc-panel-chars">${charHtml}</div>
@@ -491,6 +676,30 @@
   }
 
   $("#doc-analyze").addEventListener("click", () => { analyze(); });
+  $("#doc-ask-ai")?.addEventListener("click", async () => {
+    const text = (input.value || "").trim();
+    if (!text) {
+      showToast("먼저 글을 붙여 넣으세요");
+      return;
+    }
+    if (!tokens.length) await analyze();
+    const ok = await copyText(buildAiPrompt());
+    showToast(ok ? "복사됨 — AI 채팅에 붙여넣으세요" : "복사하지 못했습니다");
+  });
+  $("#doc-copy-summary")?.addEventListener("click", async () => {
+    if (!tokens.length) {
+      showToast("먼저 분석을 눌러 주세요");
+      return;
+    }
+    const ok = await copyText(summaryText());
+    showToast(ok ? "복사됨" : "복사하지 못했습니다");
+  });
+  $("#doc-summary-list")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tok]");
+    if (!btn) return;
+    const tok = tokens[Number(btn.dataset.tok)];
+    if (tok) showPanel(tok);
+  });
   $("#doc-speak").addEventListener("click", () => {
     const t = (input.value || "").replace(/\s+/g, "");
     if (t) window.nameAppBridge?.speak(input.value);
@@ -541,17 +750,27 @@
   if (window.__WORDS__) {
     buildIndex(window.__WORDS__);
   }
+  if (window.__KOGLOSSES__) {
+    buildGlosses(window.__KOGLOSSES__);
+  }
 
   window.documentApp = {
     get ready() { return true; },
     get wordsReady() { return !!DATA; },
+    get glossReady() { return !!GLOSS; },
+    get glossSize() { return GLOSS ? Object.keys(GLOSS).length : 0; },
     ensureWords,
+    ensureGlosses,
     analyze,
     tokenize,
     lookup,
     pick,
     eumForChar,
+    koGlossFor,
+    formatWordLine,
+    buildAiPrompt,
     get dataMeta() { return DATA && DATA.meta; },
+    get glossMeta() { return glossMeta; },
     get size() { return DATA ? DATA.e.length : 0; },
   };
 })();

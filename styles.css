@@ -259,3 +259,25 @@ header.top .tabs { flex-basis: 100%; }
 .backup-banner { border-color: #ead8a6; background: #fff8e6; margin-bottom: .8rem; }
 .backup-banner p { margin: 0 0 .55rem; }
 #doc-loading { color: var(--brand); font-weight: 600; }
+
+.doc-summary { margin-top: .8rem; }
+.doc-summary-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.doc-summary-head h2 { margin: 0; font-size: 1.05rem; }
+.doc-summary-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.doc-summary-list { margin: .65rem 0 0; padding-left: 1.25rem; }
+.doc-summary-list li { margin: .28rem 0; }
+button.doc-sum-item {
+  border: 0; background: transparent; font: inherit; text-align: left;
+  cursor: pointer; padding: .2rem .35rem; border-radius: 8px; width: 100%;
+}
+button.doc-sum-item:hover, button.doc-sum-item:focus { background: #eef4ff; }
+.doc-sum-line { font-size: .96rem; line-height: 1.45; }
+.doc-sum-src { color: var(--muted); font-size: .72rem; font-weight: 700; margin-left: .35rem; }
+.doc-ko-gloss { font-size: 1.12rem; font-weight: 700; margin: .15rem 0 .4rem; }
+.doc-panel-ko { background: #eef8f2; }
+.doc-toast {
+  position: fixed; left: 50%; bottom: 1.3rem; transform: translateX(-50%);
+  background: #1b3a5a; color: #fff; padding: .7rem 1.15rem; border-radius: 999px;
+  z-index: 130; font-weight: 700; box-shadow: var(--shadow); max-width: calc(100% - 2rem);
+  text-align: center;
+}

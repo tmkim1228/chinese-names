@@ -37,6 +37,14 @@
       "url": "https://www.mdbg.net/chinese/dictionary?page=cc-cedict",
       "date": "2026-11-06T08:10:12Z",
       "note": "https://creativecommons.org/licenses/by-sa/4.0/"
+    },
+    {
+      "name": "앱 작성 한국어 뜻",
+      "fields": "document-tab Korean word glosses (data/ko-glosses.json)",
+      "license": "Original app-author glosses; not copied from other dictionaries",
+      "url": "",
+      "date": "2026-11-09",
+      "note": "작성자가 현대·업무·사무·소프트웨어 UI 등 자주 쓰는 단어에 직접 적은 짧은 한국어 뜻입니다."
     }
   ],
   "stats": {
@@ -50,6 +58,8 @@
     "given_name_strings": 71997,
     "edu1800": 1775,
     "cedict_entries": 125369,
-    "cedict_date": "2026-11-06T08:10:12Z"
+    "cedict_date": "2026-11-06T08:10:12Z",
+    "ko_glosses": 4561,
+    "ko_glosses_authored_keys": 2948
   }
 }
