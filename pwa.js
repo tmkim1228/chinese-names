@@ -28,6 +28,9 @@ if ("serviceWorker" in navigator) {
   }).catch(console.error);
 
   function prefetchWords() {
+    fetch("data/ko-glosses.json.gz", { credentials: "same-origin" }).catch(() => {
+      fetch("data/ko-glosses.json", { credentials: "same-origin" }).catch(() => {});
+    });
     fetch("data/words.json.gz", { credentials: "same-origin" }).catch(() => {
       fetch("data/words.json", { credentials: "same-origin" }).catch(() => {});
     });
