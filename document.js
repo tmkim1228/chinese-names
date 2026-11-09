@@ -1008,6 +1008,8 @@
     const stream = !!(opts && opts.stream);
     const signal = opts && opts.signal;
     const onDelta = opts && opts.onDelta;
+    const maxTokens = opts && opts.maxTokens;
+    const requireText = !(opts && opts.requireText === false);
     const model = (settings.model || provider.defaultModel).trim();
     let url;
     let headers;
@@ -1020,10 +1022,12 @@
         "Content-Type": "application/json",
         "x-goog-api-key": settings.key,
       };
+      const generationConfig = { temperature: 0.3 };
+      if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
       body = JSON.stringify({
         systemInstruction: { parts: [{ text: AI_SYSTEM }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3 },
+        generationConfig,
       });
     } else {
       url = provider.endpoint;
@@ -1031,7 +1035,7 @@
         "Content-Type": "application/json",
         Authorization: "Bearer " + settings.key,
       };
-      body = JSON.stringify({
+      const payload = {
         model,
         messages: [
           { role: "system", content: AI_SYSTEM },
@@ -1039,7 +1043,9 @@
         ],
         temperature: 0.3,
         stream,
-      });
+      };
+      if (maxTokens) payload.max_tokens = maxTokens;
+      body = JSON.stringify(payload);
     }
     let res;
     try {
@@ -1053,8 +1059,8 @@
       throw new AiError("http", res.status);
     }
     const text = await parseProviderResponse(provider, res, onDelta);
-    if (!String(text || "").trim()) throw new AiError("empty", res.status || 200);
-    return String(text);
+    if (requireText && !String(text || "").trim()) throw new AiError("empty", res.status || 200);
+    return String(text || "");
   }
 
   async function askAi() {
@@ -1068,14 +1074,22 @@
       openAiSettings("앱 안에서 답을 보려면 API 키를 저장해 주세요. 키는 이 기기에만 저장됩니다.");
       return;
     }
-    if (!tokens.length) await analyze({ keepAi: true });
-    const provider = AI_PROVIDERS[settings.provider] || AI_PROVIDERS.xai;
-    const prompt = buildAiPrompt();
+    const askBtn = $("#doc-ask-ai");
+    const askLabel = askBtn ? askBtn.textContent : "AI에게 묻기";
+    if (askBtn) {
+      askBtn.disabled = true;
+      askBtn.textContent = "답변 받는 중…";
+    }
     showAiLoading();
-    if (aiAbort) aiAbort.abort();
-    aiAbort = new AbortController();
-    const signal = aiAbort.signal;
+    const resultBox = $("#doc-ai-result");
+    if (resultBox) resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
     try {
+      if (!tokens.length) await analyze({ keepAi: true });
+      const provider = AI_PROVIDERS[settings.provider] || AI_PROVIDERS.xai;
+      const prompt = buildAiPrompt();
+      if (aiAbort) aiAbort.abort();
+      aiAbort = new AbortController();
+      const signal = aiAbort.signal;
       const answer = await requestProvider(provider, settings, prompt, {
         stream: true,
         signal,
@@ -1085,6 +1099,11 @@
     } catch (err) {
       if (err && err.name === "AbortError") return;
       showAiError(formatAiError(err));
+    } finally {
+      if (askBtn) {
+        askBtn.disabled = false;
+        askBtn.textContent = askLabel || "AI에게 묻기";
+      }
     }
   }
 
@@ -1097,9 +1116,14 @@
       return;
     }
     if (status) status.textContent = "연결을 확인하는 중…";
+    const model = (settings.model || provider.defaultModel).trim();
     try {
-      const text = await requestProvider(provider, settings, "한국어로 '연결됨'이라고만 답하세요.", { stream: false });
-      if (status) status.textContent = "연결되었습니다. " + String(text).replace(/\s+/g, " ").slice(0, 80);
+      await requestProvider(provider, settings, "ping", {
+        stream: false,
+        maxTokens: 8,
+        requireText: false,
+      });
+      if (status) status.textContent = "연결되었습니다 (모델: " + model + ")";
     } catch (err) {
       if (status) status.textContent = formatAiError(err);
     }

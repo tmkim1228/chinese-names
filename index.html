@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#1b3a5a" />
-  <title>중국 이름 배우기 v1.8</title>
+  <title>중국 이름 배우기 v1.9</title>
   <link rel="stylesheet" href="styles.css" />
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="이름옥편"><meta name="mobile-web-app-capable" content="yes"></head>
 <body>
@@ -12,7 +12,7 @@
     <div class="brand">
       <span class="logo">名</span>
       <div>
-        <h1>중국 이름 배우기 <small>v1.8</small></h1>
+        <h1>중국 이름 배우기 <small>v1.9</small></h1>
         <p class="sub">중국 한자·이름·문서 옥편 · 오프라인 사전</p>
       </div>
     </div>
@@ -109,15 +109,6 @@
       </div>
     </section>
     <section id="doc-output" class="doc-output panel" hidden></section>
-    <section id="doc-summary" class="panel doc-summary" hidden>
-      <div class="doc-summary-head">
-        <h2>단어 정리</h2>
-        <div class="doc-summary-actions">
-          <button type="button" id="doc-copy-summary" class="ghost">목록 복사</button>
-        </div>
-      </div>
-      <ol id="doc-summary-list" class="doc-summary-list"></ol>
-    </section>
     <section id="doc-ai-result" class="panel doc-ai-result" hidden>
       <div class="doc-ai-head">
         <h2>AI 설명</h2>
@@ -129,6 +120,15 @@
       <p id="doc-ai-status" class="hint" hidden>답변을 받는 중…</p>
       <div id="doc-ai-answer" class="doc-ai-answer"></div>
       <p id="doc-ai-error" class="doc-ai-error" hidden></p>
+    </section>
+    <section id="doc-summary" class="panel doc-summary" hidden>
+      <div class="doc-summary-head">
+        <h2>단어 정리</h2>
+        <div class="doc-summary-actions">
+          <button type="button" id="doc-copy-summary" class="ghost">목록 복사</button>
+        </div>
+      </div>
+      <ol id="doc-summary-list" class="doc-summary-list"></ol>
     </section>
     <section id="doc-unknown" class="panel" hidden>
       <h2>복습 목록에 없는 항목</h2>
