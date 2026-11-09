@@ -1,0 +1,39 @@
+{
+  "id": "./",
+  "name": "중국 이름 배우기 v1.6",
+  "short_name": "이름옥편",
+  "description": "중국 한자·이름·문서를 병음과 한국 훈음·독음으로 배우는 오프라인 옥편",
+  "lang": "ko",
+  "start_url": ".",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1b3a5a",
+  "theme_color": "#1b3a5a",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
