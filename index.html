@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#1b3a5a" />
-  <title>중국 이름 배우기 v1.7</title>
+  <title>중국 이름 배우기 v1.8</title>
   <link rel="stylesheet" href="styles.css" />
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="이름옥편"><meta name="mobile-web-app-capable" content="yes"></head>
 <body>
@@ -12,11 +12,12 @@
     <div class="brand">
       <span class="logo">名</span>
       <div>
-        <h1>중국 이름 배우기 <small>v1.7</small></h1>
+        <h1>중국 이름 배우기 <small>v1.8</small></h1>
         <p class="sub">중국 한자·이름·문서 옥편 · 오프라인 사전</p>
       </div>
     </div>
     <div class="header-actions">
+      <button type="button" id="btn-ai-settings" class="ghost install-btn">AI 설정</button>
       <button type="button" id="btn-install" class="ghost install-btn">앱 설치</button>
     </div>
     <nav class="tabs" role="tablist">
@@ -56,7 +57,7 @@
       <ul>
         <li><strong>이름</strong> — 병음(wang xiaoming)이나 한글 독음(왕소명)으로 중국 이름을 찾고 조립합니다.</li>
         <li><strong>한자 · 병음 · 한글</strong> — 글자·병음·한국 독음/훈음으로 옥편을 찾습니다.</li>
-        <li><strong>문서</strong> — 회사 문서 등 중국어 글을 붙여 넣어 단어 병음·독음·한국어 뜻(앱 작성)을 봅니다. 없는 단어는 영어 뜻과 글자 훈음으로 보완합니다. 단어 사전은 이 탭을 처음 열 때 내려받습니다. 「AI에게 묻기」는 설명을 요청할 문장만 복사하며, 문서는 어디에도 보내지 않습니다.</li>
+        <li><strong>문서</strong> — 회사 문서 등 중국어 글을 붙여 넣어 단어 병음·독음·한국어 뜻(앱 작성)을 봅니다. 없는 단어는 영어 뜻과 글자 훈음으로 보완합니다. 단어 사전은 이 탭을 처음 열 때 내려받습니다. 「AI에게 묻기」는 저장한 API 키로 앱 안에서 바로 번역·문맥 설명을 보여 줍니다. 키는 이 기기에만 저장되며, 질문할 때 문서 내용이 선택한 AI 회사로 전송되고 사용량만큼 요금이 부과됩니다.</li>
         <li><strong>복습</strong> — 저장한 이름·글자·단어를 다시 보고 플래시카드로 익힙니다. 목록은 이 브라우저에만 남으니 JSON으로 백업하세요.</li>
       </ul>
       <p class="hint">휴대폰이나 컴퓨터에 설치하면 홈 화면에서 앱처럼 열 수 있습니다.</p>
@@ -92,13 +93,15 @@
       <div class="doc-toolbar">
         <button type="button" id="doc-analyze" class="primary">분석</button>
         <button type="button" id="doc-ask-ai" class="ghost">AI에게 묻기</button>
+        <button type="button" id="doc-copy-prompt" class="ghost doc-btn-small">프롬프트 복사</button>
+        <button type="button" id="doc-ai-settings" class="ghost" title="AI 설정">⚙ 설정</button>
         <button type="button" id="doc-speak" class="ghost">문장 읽기</button>
         <label><input type="checkbox" id="doc-toggle-py" checked /> 병음</label>
         <label><input type="checkbox" id="doc-toggle-eum" checked /> 독음</label>
         <label><input type="checkbox" id="doc-unknown-only" /> 모르는 항목만 강조</label>
       </div>
       <p id="doc-loading" class="status" hidden>단어 사전(CC-CEDICT)을 불러오는 중… 처음 한 번만 내려받으면 이후에는 오프라인에서도 쓸 수 있습니다.</p>
-      <p class="hint">단어를 누르면 한국어 뜻(앱 작성)·영어 뜻(CC-CEDICT)·훈음·독음을 봅니다. 분석 후 아래에 단어 정리가 나타납니다. 「AI에게 묻기」는 번역·문맥 설명을 요청할 문장만 복사하며, 회사 문서는 어디에도 전송되지 않습니다. 간체·번체, 숫자·영문·문장부호가 섞여 있어도 됩니다.</p>
+      <p class="hint">단어를 누르면 한국어 뜻(앱 작성)·영어 뜻(CC-CEDICT)·훈음·독음을 봅니다. 분석 후 아래에 단어 정리가 나타납니다. 「AI에게 묻기」는 API 키가 있으면 앱 안에서 답을 보여 주고, 키가 없으면 설정 창을 엽니다. 키는 이 기기에만 저장되며, 질문할 때 문서 내용이 선택한 AI 회사로 전송되고 사용량만큼 요금이 부과됩니다. 간체·번체, 숫자·영문·문장부호가 섞여 있어도 됩니다.</p>
       <div class="examples">
         <button type="button" class="ex doc-ex" data-q="快速上手多维表格">다차원 표 시작</button>
         <button type="button" class="ex doc-ex" data-q="本公司将于下周召开董事会会议，讨论银行贷款和会计报表。请各部门负责人准时参加。">간체 예문</button>
@@ -114,6 +117,18 @@
         </div>
       </div>
       <ol id="doc-summary-list" class="doc-summary-list"></ol>
+    </section>
+    <section id="doc-ai-result" class="panel doc-ai-result" hidden>
+      <div class="doc-ai-head">
+        <h2>AI 설명</h2>
+        <div class="doc-ai-actions">
+          <button type="button" id="doc-ai-copy" class="ghost">복사</button>
+          <button type="button" id="doc-ai-retry" class="ghost">다시 묻기</button>
+        </div>
+      </div>
+      <p id="doc-ai-status" class="hint" hidden>답변을 받는 중…</p>
+      <div id="doc-ai-answer" class="doc-ai-answer"></div>
+      <p id="doc-ai-error" class="doc-ai-error" hidden></p>
     </section>
     <section id="doc-unknown" class="panel" hidden>
       <h2>복습 목록에 없는 항목</h2>
@@ -142,6 +157,42 @@
     <section id="review-list" class="review-list"></section>
     <section id="review-empty" class="empty-box">아직 저장된 항목이 없습니다. 이름·글자·단어를 고른 뒤 저장 버튼을 누르세요.</section>
   </main>
+
+  <!-- AI settings modal -->
+  <div id="ai-settings-modal" class="modal" hidden>
+    <div class="modal-card ai-settings-card">
+      <header class="modal-head">
+        <h2>AI 설정</h2>
+        <button type="button" id="ai-settings-close" class="icon-x" aria-label="닫기">×</button>
+      </header>
+      <p id="ai-settings-reason" class="ai-settings-reason" hidden>앱 안에서 답을 보려면 API 키를 저장해 주세요. 키는 이 기기에만 저장됩니다.</p>
+      <label for="ai-provider">제공 회사</label>
+      <select id="ai-provider">
+        <option value="xai">xAI Grok</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Google Gemini</option>
+      </select>
+      <label for="ai-model">모델</label>
+      <input id="ai-model" type="text" spellcheck="false" autocomplete="off" placeholder="예: grok-4.7" />
+      <label for="ai-key">API 키</label>
+      <div class="ai-key-row">
+        <input id="ai-key" type="password" spellcheck="false" autocomplete="off" placeholder="이 기기에만 저장됩니다" />
+        <button type="button" id="ai-key-toggle" class="ghost">표시</button>
+      </div>
+      <p class="hint ai-privacy-note">키는 이 기기에만 저장되며, 질문할 때 문서 내용이 선택한 AI 회사로 전송되고 사용량만큼 요금이 부과됩니다.</p>
+      <p class="hint">키 발급:
+        <a href="https://console.x.ai/" target="_blank" rel="noopener noreferrer">xAI (console.x.ai)</a> ·
+        <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI</a> ·
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google Gemini</a>
+      </p>
+      <div class="toolbar-actions ai-settings-actions">
+        <button type="button" id="ai-settings-save" class="primary">저장</button>
+        <button type="button" id="ai-settings-test" class="ghost">연결 테스트</button>
+        <button type="button" id="ai-settings-clear" class="danger">키 삭제</button>
+      </div>
+      <p id="ai-settings-status" class="hint" aria-live="polite"></p>
+    </div>
+  </div>
 
   <!-- Flashcard modal -->
   <div id="flash-modal" class="modal" hidden>

@@ -1,4 +1,4 @@
-const CACHE = "name-dictionary-v1.7-20261109";
+const CACHE = "name-dictionary-v1.8-20261109";
 const FILES = [
   "./",
   "./index.html",
@@ -36,9 +36,11 @@ self.addEventListener("activate", (e) => {
   );
 });
 self.addEventListener("fetch", (e) => {
+  // Never cache AI API traffic. Only same-origin GETs are eligible.
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
+  if (/api\.x\.ai$|api\.openai\.com$|generativelanguage\.googleapis\.com$/.test(url.hostname)) return;
   e.respondWith((async () => {
     const cached = await caches.match(e.request);
     if (cached) return cached;
