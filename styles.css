@@ -281,3 +281,49 @@ button.doc-sum-item:hover, button.doc-sum-item:focus { background: #eef4ff; }
   z-index: 130; font-weight: 700; box-shadow: var(--shadow); max-width: calc(100% - 2rem);
   text-align: center;
 }
+
+.doc-btn-small { font-size: .82rem; padding: .5rem .85rem; font-weight: 600; }
+.header-actions { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+.doc-ai-result { margin-top: .8rem; }
+.doc-ai-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.doc-ai-head h2 { margin: 0; font-size: 1.05rem; }
+.doc-ai-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.doc-ai-answer { line-height: 1.65; overflow-wrap: anywhere; margin-top: .45rem; }
+.doc-ai-answer h2, .doc-ai-answer h3, .doc-ai-answer h4 { font-size: 1.02rem; margin: .95rem 0 .35rem; }
+.doc-ai-answer p { margin: .4rem 0; }
+.doc-ai-answer ul, .doc-ai-answer ol { margin: .4rem 0 .4rem 1.2rem; padding: 0; }
+.doc-ai-answer li { margin: .2rem 0; }
+.doc-ai-answer code {
+  background: #eef1f6; padding: .08rem .35rem; border-radius: 6px;
+  font-size: .9em; font-family: ui-monospace, Menlo, monospace;
+}
+.doc-ai-answer pre {
+  background: #f4f7fb; padding: .8rem 1rem; border-radius: 12px; overflow: auto;
+}
+.doc-ai-answer pre code { background: transparent; padding: 0; }
+.doc-ai-answer a { color: var(--brand2); }
+.doc-ai-error { color: var(--danger); font-weight: 700; margin: .55rem 0 0; }
+.doc-ai-result.is-loading .doc-ai-answer { opacity: .78; }
+.ai-settings-card { width: min(520px, 100%); }
+.ai-settings-card label {
+  display: block; margin: .75rem 0 .3rem; font-size: .85rem;
+  color: var(--muted); font-weight: 700;
+}
+.ai-settings-card input[type="text"],
+.ai-settings-card input[type="password"],
+.ai-settings-card select {
+  width: 100%; border: 1.5px solid var(--border); border-radius: 12px;
+  padding: .65rem .85rem; font-size: 1rem; outline: none; background: #fff;
+}
+.ai-settings-card input:focus, .ai-settings-card select:focus {
+  border-color: var(--brand2); box-shadow: 0 0 0 3px rgba(47,111,237,.15);
+}
+.ai-key-row { display: flex; gap: .4rem; align-items: center; }
+.ai-key-row input { flex: 1; min-width: 0; }
+.ai-privacy-note { margin-top: .7rem; }
+.ai-settings-reason {
+  background: #fff8e6; border: 1px solid #ead8a6; border-radius: 12px;
+  padding: .65rem .8rem; margin: .7rem 0 0; font-size: .9rem;
+}
+.ai-settings-actions { margin-top: .9rem; }
+#ai-settings-status { min-height: 1.2em; font-weight: 600; }
