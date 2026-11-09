@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#1b3a5a" />
-  <title>중국 이름 배우기 v1.9</title>
+  <title>중국 이름 배우기 v2.0</title>
   <link rel="stylesheet" href="styles.css" />
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="이름옥편"><meta name="mobile-web-app-capable" content="yes"></head>
 <body>
@@ -12,7 +12,7 @@
     <div class="brand">
       <span class="logo">名</span>
       <div>
-        <h1>중국 이름 배우기 <small>v1.9</small></h1>
+        <h1>중국 이름 배우기 <small>v2.0</small></h1>
         <p class="sub">중국 한자·이름·문서 옥편 · 오프라인 사전</p>
       </div>
     </div>
@@ -180,6 +180,10 @@
         <button type="button" id="ai-key-toggle" class="ghost">표시</button>
       </div>
       <p class="hint ai-privacy-note">키는 이 기기에만 저장되며, 질문할 때 문서 내용이 선택한 AI 회사로 전송되고 사용량만큼 요금이 부과됩니다.</p>
+      <label class="ai-stream-label" for="ai-use-stream">
+        <input type="checkbox" id="ai-use-stream" checked />
+        <span>스트리밍 사용 (답이 조금씩 나타남)</span>
+      </label>
       <p class="hint">키 발급:
         <a href="https://console.x.ai/" target="_blank" rel="noopener noreferrer">xAI (console.x.ai)</a> ·
         <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI</a> ·
