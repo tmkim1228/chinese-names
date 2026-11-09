@@ -673,6 +673,7 @@
 
   const AI_STORAGE_KEY = "chinese-name-app.ai.v1";
   const AI_SYSTEM = "당신은 중국어 문서와 소프트웨어·업무용 UI 문구를 한국어로 정확하게 설명하는 도우미입니다. 요청한 형식을 지키고 한국어로 답하세요.";
+  let AI_TIMEOUT_MS = 120000;
   const AI_PROVIDERS = {
     xai: {
       id: "xai",
@@ -704,26 +705,41 @@
   let aiAbort = null;
 
   class AiError extends Error {
-    constructor(message, status) {
+    constructor(message, status, detail) {
       super(message);
       this.name = "AiError";
       this.status = status || 0;
+      this.detail = detail ? String(detail).slice(0, 200) : "";
     }
+  }
+
+  function scrubSecretDetail(text) {
+    return String(text || "")
+      .replace(/Bearer\s+\S+/gi, "Bearer ***")
+      .replace(/xai-[A-Za-z0-9._-]{8,}/g, "xai-***")
+      .replace(/sk-[A-Za-z0-9._-]{8,}/g, "sk-***")
+      .replace(/AIza[A-Za-z0-9._-]{8,}/g, "AIza***")
+      .slice(0, 200);
+  }
+
+  function truncateDetail(text) {
+    return scrubSecretDetail(String(text || "").replace(/\s+/g, " ").trim()).slice(0, 200);
   }
 
   function loadAiSettings() {
     try {
       const raw = localStorage.getItem(AI_STORAGE_KEY);
-      if (!raw) return { provider: "xai", model: AI_PROVIDERS.xai.defaultModel, key: "" };
+      if (!raw) return { provider: "xai", model: AI_PROVIDERS.xai.defaultModel, key: "", noStream: false };
       const parsed = JSON.parse(raw);
       const provider = AI_PROVIDERS[parsed.provider] ? parsed.provider : "xai";
       return {
         provider,
         model: (parsed.model && String(parsed.model).trim()) || AI_PROVIDERS[provider].defaultModel,
         key: typeof parsed.key === "string" ? parsed.key : "",
+        noStream: !!parsed.noStream,
       };
     } catch {
-      return { provider: "xai", model: AI_PROVIDERS.xai.defaultModel, key: "" };
+      return { provider: "xai", model: AI_PROVIDERS.xai.defaultModel, key: "", noStream: false };
     }
   }
 
@@ -733,6 +749,7 @@
       provider,
       model: String((data && data.model) || AI_PROVIDERS[provider].defaultModel).trim() || AI_PROVIDERS[provider].defaultModel,
       key: String((data && data.key) || ""),
+      noStream: !!(data && data.noStream),
     };
     localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(rec));
     return rec;
@@ -741,17 +758,31 @@
   function readAiForm() {
     const provider = ($("#ai-provider") && $("#ai-provider").value) || "xai";
     const p = AI_PROVIDERS[provider] || AI_PROVIDERS.xai;
+    const streamBox = $("#ai-use-stream");
     return {
       provider: p.id,
       model: (($("#ai-model") && $("#ai-model").value) || "").trim() || p.defaultModel,
       key: (($("#ai-key") && $("#ai-key").value) || "").trim(),
+      noStream: streamBox ? !streamBox.checked : false,
     };
   }
 
   function clearAiKey() {
     const cur = loadAiSettings();
-    persistAiSettings({ provider: cur.provider, model: cur.model, key: "" });
+    persistAiSettings({ provider: cur.provider, model: cur.model, key: "", noStream: cur.noStream });
     if ($("#ai-key")) $("#ai-key").value = "";
+  }
+
+  function rememberNoStream(settings) {
+    const next = persistAiSettings({
+      provider: settings.provider,
+      model: settings.model,
+      key: settings.key,
+      noStream: true,
+    });
+    const box = $("#ai-use-stream");
+    if (box) box.checked = false;
+    return next;
   }
 
   function openAiSettings(reason) {
@@ -765,6 +796,7 @@
       $("#ai-key").type = "password";
     }
     if ($("#ai-key-toggle")) $("#ai-key-toggle").textContent = "표시";
+    if ($("#ai-use-stream")) $("#ai-use-stream").checked = !s.noStream;
     const reasonEl = $("#ai-settings-reason");
     if (reasonEl) {
       if (reason) {
@@ -796,7 +828,11 @@
     const status = $("#doc-ai-status");
     if (status) { status.hidden = true; status.textContent = ""; }
     const err = $("#doc-ai-error");
-    if (err) { err.hidden = true; err.textContent = ""; }
+    if (err) {
+      err.hidden = true;
+      err.textContent = "";
+      err.innerHTML = "";
+    }
     const ans = $("#doc-ai-answer");
     if (ans) ans.innerHTML = "";
     lastAiText = "";
@@ -870,7 +906,7 @@
     return html.join("") || "<p></p>";
   }
 
-  function showAiLoading() {
+  function showAiLoading(msg) {
     const box = $("#doc-ai-result");
     if (!box) return;
     box.hidden = false;
@@ -878,13 +914,25 @@
     const status = $("#doc-ai-status");
     if (status) {
       status.hidden = false;
-      status.textContent = "답변을 받는 중…";
+      status.textContent = msg || "답변을 받는 중…";
     }
     const err = $("#doc-ai-error");
-    if (err) { err.hidden = true; err.textContent = ""; }
+    if (err) { err.hidden = true; err.textContent = ""; err.innerHTML = ""; }
     const ans = $("#doc-ai-answer");
     if (ans) ans.innerHTML = "";
     lastAiText = "";
+  }
+
+  function setAiStatus(msg, loading) {
+    const box = $("#doc-ai-result");
+    if (!box) return;
+    box.hidden = false;
+    if (loading != null) box.classList.toggle("is-loading", !!loading);
+    const status = $("#doc-ai-status");
+    if (status) {
+      status.hidden = !msg;
+      status.textContent = msg || "";
+    }
   }
 
   function renderAiAnswer(text, loading) {
@@ -895,16 +943,22 @@
     const status = $("#doc-ai-status");
     if (status) {
       status.hidden = !loading;
-      if (loading) status.textContent = "답변을 받는 중…";
+      if (loading) {
+        if (!(status.textContent && status.textContent.includes("다시 시도"))) {
+          status.textContent = "답변을 받는 중…";
+        }
+      } else {
+        status.textContent = "";
+      }
     }
     const err = $("#doc-ai-error");
-    if (err) { err.hidden = true; err.textContent = ""; }
+    if (err) { err.hidden = true; err.textContent = ""; err.innerHTML = ""; }
     lastAiText = text;
     const ans = $("#doc-ai-answer");
     if (ans) ans.innerHTML = renderSafeMarkdown(text);
   }
 
-  function showAiError(msg) {
+  function showAiError(msg, detail) {
     const box = $("#doc-ai-result");
     if (!box) return;
     box.hidden = false;
@@ -912,63 +966,142 @@
     const status = $("#doc-ai-status");
     if (status) status.hidden = true;
     const err = $("#doc-ai-error");
-    if (err) {
-      err.hidden = false;
-      err.textContent = msg;
+    if (!err) return;
+    err.hidden = false;
+    err.textContent = "";
+    err.innerHTML = "";
+    const main = document.createElement("span");
+    main.className = "doc-ai-error-msg";
+    main.textContent = msg || "답변을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    err.appendChild(main);
+    if (detail) {
+      const d = document.createElement("span");
+      d.className = "doc-ai-error-detail";
+      d.textContent = truncateDetail(detail);
+      err.appendChild(d);
     }
+  }
+
+  function isTimeoutError(err) {
+    if (!err) return false;
+    if (err.name === "TimeoutError") return true;
+    if (err instanceof AiError && err.message === "timeout") return true;
+    const msg = String(err.message || "");
+    return /timeout/i.test(msg) && !(err.status > 0);
+  }
+
+  function isNetworkAiError(err) {
+    if (!err) return false;
+    if (isTimeoutError(err)) return false;
+    if (err.name === "AbortError") return false;
+    if (err instanceof AiError) {
+      if (err.status > 0) return false;
+      if (err.message === "empty" || err.message === "http" || err.message === "timeout") return false;
+      return true;
+    }
+    if (err.name === "TypeError") return true;
+    const msg = String(err.message || "");
+    return /failed to fetch|networkerror|load failed|network/i.test(msg);
   }
 
   function formatAiError(err) {
+    let message = "답변을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
     const status = err && err.status;
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      return "네트워크에 연결할 수 없습니다. 인터넷을 확인한 뒤 다시 시도해 주세요.";
+      message = "네트워크에 연결할 수 없습니다. 인터넷을 확인한 뒤 다시 시도해 주세요.";
+    } else if (isTimeoutError(err)) {
+      message = "응답이 너무 늦습니다. 잠시 후 다시 시도하거나 더 빠른 모델(예: grok-4.3)을 써 보세요.";
+    } else if (status === 401 || status === 403) {
+      message = "API 키가 올바르지 않거나 권한이 없습니다. 설정에서 키를 확인해 주세요.";
+    } else if (status === 429) {
+      message = "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.";
+    } else if (status === 404) {
+      message = "모델 이름을 찾을 수 없습니다. 설정에서 모델 이름을 확인해 주세요.";
+    } else if (status === 400) {
+      const detailBlob = String((err && err.detail) || "") + " " + String((err && err.message) || "");
+      if (/api key|incorrect.*key|invalid.*key|unauthorized/i.test(detailBlob)) {
+        message = "API 키가 올바르지 않거나 권한이 없습니다. 설정에서 키를 확인해 주세요.";
+      } else {
+        message = "요청 형식이 맞지 않습니다";
+      }
+    } else if (status >= 500) {
+      message = "AI 서버에 문제가 있습니다. 잠시 후 다시 시도해 주세요.";
+    } else if (isNetworkAiError(err)) {
+      message = "네트워크에 연결할 수 없습니다. 인터넷을 확인한 뒤 다시 시도해 주세요.";
     }
-    if (status === 401 || status === 403) {
-      return "API 키가 올바르지 않거나 권한이 없습니다. 설정에서 키를 확인해 주세요.";
+
+    const parts = [];
+    if (status) parts.push("HTTP " + status);
+    if (err && err.message && !/^(http|network|empty|timeout)$/i.test(err.message)) {
+      parts.push(String(err.message));
+    } else if (err && err.message === "timeout") {
+      parts.push("timeout");
+    } else if (err && err.message === "network") {
+      parts.push("network");
+    } else if (err && err.name === "TypeError") {
+      parts.push(err.message || "TypeError");
     }
-    if (status === 429) {
-      return "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.";
+    if (err && err.detail) parts.push(String(err.detail));
+    const detail = truncateDetail(parts.join(" · "));
+    return { message, detail };
+  }
+
+  function showFormattedAiError(err) {
+    const formatted = formatAiError(err);
+    showAiError(formatted.message, formatted.detail);
+  }
+
+  async function readHttpErrorDetail(res) {
+    try {
+      const json = await res.json();
+      if (!json || typeof json !== "object") return "";
+      if (typeof json.error === "string") return json.error;
+      if (json.error && typeof json.error.message === "string") return json.error.message;
+      if (typeof json.message === "string") return json.message;
+      try { return JSON.stringify(json).slice(0, 200); } catch { return ""; }
+    } catch {
+      try {
+        const t = await res.text();
+        return String(t || "").slice(0, 200);
+      } catch {
+        return "";
+      }
     }
-    if (status === 404) {
-      return "모델 이름을 찾을 수 없습니다. 설정에서 모델 이름을 확인해 주세요.";
-    }
-    if (status >= 500) {
-      return "AI 서버에 문제가 있습니다. 잠시 후 다시 시도해 주세요.";
-    }
-    const msg = String((err && err.message) || "");
-    if (/failed to fetch|networkerror|load failed|network/i.test(msg) || (err && err.name === "TypeError")) {
-      return "네트워크에 연결할 수 없습니다. 인터넷을 확인한 뒤 다시 시도해 주세요.";
-    }
-    return "답변을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
   }
 
   async function readSseStream(res, pickChunk, onDelta) {
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let full = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-        const data = trimmed.slice(5).trim();
-        if (!data || data === "[DONE]") continue;
-        try {
-          const json = JSON.parse(data);
-          const piece = pickChunk(json);
-          if (piece) {
-            full += piece;
-            if (onDelta) onDelta(full);
-          }
-        } catch { /* ignore malformed sse lines */ }
+    try {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let full = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const data = trimmed.slice(5).trim();
+          if (!data || data === "[DONE]") continue;
+          try {
+            const json = JSON.parse(data);
+            const piece = pickChunk(json);
+            if (piece) {
+              full += piece;
+              if (onDelta) onDelta(full);
+            }
+          } catch { /* ignore malformed sse lines */ }
+        }
       }
+      return full;
+    } catch (err) {
+      if (err && err.name === "AbortError") throw err;
+      if (isTimeoutError(err)) throw new AiError("timeout", 0, truncateDetail(err && err.message));
+      throw new AiError((err && err.message) || "network", 0, truncateDetail(err && err.message));
     }
-    return full;
   }
 
   function openaiChunk(json) {
@@ -1004,12 +1137,35 @@
     return text;
   }
 
+  function combineAbortSignals(a, b) {
+    if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+      const list = [a, b].filter(Boolean);
+      if (list.length === 1) return list[0];
+      if (list.length > 1) return AbortSignal.any(list);
+    }
+    const ctrl = new AbortController();
+    const abortFrom = (sig) => {
+      if (!sig) return;
+      if (sig.aborted) {
+        try { ctrl.abort(sig.reason); } catch { ctrl.abort(); }
+        return;
+      }
+      sig.addEventListener("abort", () => {
+        try { ctrl.abort(sig.reason); } catch { ctrl.abort(); }
+      }, { once: true });
+    };
+    abortFrom(a);
+    abortFrom(b);
+    return ctrl.signal;
+  }
+
   async function requestProvider(provider, settings, prompt, opts) {
     const stream = !!(opts && opts.stream);
-    const signal = opts && opts.signal;
+    const parentSignal = opts && opts.signal;
     const onDelta = opts && opts.onDelta;
     const maxTokens = opts && opts.maxTokens;
     const requireText = !(opts && opts.requireText === false);
+    const timeoutMs = (opts && opts.timeoutMs != null) ? Number(opts.timeoutMs) : AI_TIMEOUT_MS;
     const model = (settings.model || provider.defaultModel).trim();
     let url;
     let headers;
@@ -1045,22 +1201,51 @@
         stream,
       };
       if (maxTokens) payload.max_tokens = maxTokens;
+      // Do not send reasoning_effort / presence_penalty / frequency_penalty / stop:
+      // grok-4 family has historically rejected unsupported args with HTTP 400.
       body = JSON.stringify(payload);
     }
+
+    const timeoutCtrl = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { timeoutCtrl.abort(new DOMException("timeout", "TimeoutError")); } catch { timeoutCtrl.abort(); }
+    }, Math.max(1000, timeoutMs || AI_TIMEOUT_MS));
+    const signal = combineAbortSignals(parentSignal, timeoutCtrl.signal);
+
     let res;
     try {
       res = await fetch(url, { method: "POST", headers, body, signal });
     } catch (err) {
+      clearTimeout(timer);
+      if (parentSignal && parentSignal.aborted && !timedOut) throw (err && err.name === "AbortError" ? err : new DOMException("Aborted", "AbortError"));
+      if (timedOut || isTimeoutError(err) || (err && err.name === "AbortError" && timedOut)) {
+        throw new AiError("timeout", 0, "timeout " + timeoutMs + "ms");
+      }
       if (err && err.name === "AbortError") throw err;
-      throw new AiError((err && err.message) || "network", 0);
+      throw new AiError((err && err.message) || "network", 0, truncateDetail(err && err.message));
     }
+
     if (!res.ok) {
-      try { await res.json(); } catch { /* ignore body */ }
-      throw new AiError("http", res.status);
+      clearTimeout(timer);
+      const detail = await readHttpErrorDetail(res);
+      throw new AiError("http", res.status, detail);
     }
-    const text = await parseProviderResponse(provider, res, onDelta);
-    if (requireText && !String(text || "").trim()) throw new AiError("empty", res.status || 200);
-    return String(text || "");
+
+    try {
+      const text = await parseProviderResponse(provider, res, onDelta);
+      clearTimeout(timer);
+      if (requireText && !String(text || "").trim()) throw new AiError("empty", res.status || 200);
+      return String(text || "");
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof AiError) throw err;
+      if (parentSignal && parentSignal.aborted && !timedOut) throw err;
+      if (timedOut || isTimeoutError(err)) throw new AiError("timeout", 0, "timeout " + timeoutMs + "ms");
+      if (err && err.name === "AbortError") throw err;
+      throw new AiError((err && err.message) || "network", 0, truncateDetail(err && err.message));
+    }
   }
 
   async function askAi() {
@@ -1069,7 +1254,7 @@
       showToast("먼저 글을 붙여 넣으세요");
       return;
     }
-    const settings = loadAiSettings();
+    let settings = loadAiSettings();
     if (!settings.key) {
       openAiSettings("앱 안에서 답을 보려면 API 키를 저장해 주세요. 키는 이 기기에만 저장됩니다.");
       return;
@@ -1080,7 +1265,7 @@
       askBtn.disabled = true;
       askBtn.textContent = "답변 받는 중…";
     }
-    showAiLoading();
+    showAiLoading("답변을 받는 중…");
     const resultBox = $("#doc-ai-result");
     if (resultBox) resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
     try {
@@ -1090,15 +1275,46 @@
       if (aiAbort) aiAbort.abort();
       aiAbort = new AbortController();
       const signal = aiAbort.signal;
-      const answer = await requestProvider(provider, settings, prompt, {
-        stream: true,
-        signal,
-        onDelta: (full) => renderAiAnswer(full, true),
-      });
+      const useStream = !settings.noStream;
+      let answer;
+      if (useStream) {
+        try {
+          answer = await requestProvider(provider, settings, prompt, {
+            stream: true,
+            signal,
+            onDelta: (full) => renderAiAnswer(full, true),
+          });
+        } catch (err) {
+          if (err && err.name === "AbortError") throw err;
+          if (isNetworkAiError(err)) {
+            const hadPartial = !!(lastAiText && String(lastAiText).trim());
+            settings = rememberNoStream(settings);
+            setAiStatus("다른 방식으로 다시 시도하는 중…", true);
+            if (hadPartial) {
+              const ans = $("#doc-ai-answer");
+              if (ans) ans.innerHTML = "";
+              lastAiText = "";
+            }
+            answer = await requestProvider(provider, settings, prompt, {
+              stream: false,
+              signal,
+              onDelta: (full) => renderAiAnswer(full, true),
+            });
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        answer = await requestProvider(provider, settings, prompt, {
+          stream: false,
+          signal,
+          onDelta: (full) => renderAiAnswer(full, true),
+        });
+      }
       renderAiAnswer(answer, false);
     } catch (err) {
       if (err && err.name === "AbortError") return;
-      showAiError(formatAiError(err));
+      showFormattedAiError(err);
     } finally {
       if (askBtn) {
         askBtn.disabled = false;
@@ -1122,10 +1338,43 @@
         stream: false,
         maxTokens: 8,
         requireText: false,
+        timeoutMs: Math.min(AI_TIMEOUT_MS, 60000),
+      });
+    } catch (err) {
+      if (status) {
+        const formatted = formatAiError(err);
+        status.textContent = formatted.detail
+          ? formatted.message + " (" + formatted.detail + ")"
+          : formatted.message;
+      }
+      return;
+    }
+
+    try {
+      await requestProvider(provider, settings, "ping", {
+        stream: true,
+        maxTokens: 8,
+        requireText: false,
+        timeoutMs: Math.min(AI_TIMEOUT_MS, 45000),
       });
       if (status) status.textContent = "연결되었습니다 (모델: " + model + ")";
     } catch (err) {
-      if (status) status.textContent = formatAiError(err);
+      if (isNetworkAiError(err) || isTimeoutError(err)) {
+        rememberNoStream(settings);
+        persistAiSettings({
+          provider: settings.provider,
+          model: settings.model,
+          key: settings.key,
+          noStream: true,
+        });
+        if ($("#ai-use-stream")) $("#ai-use-stream").checked = false;
+        if (status) {
+          status.textContent = "연결되었습니다 (모델: " + model + ") · 스트리밍이 막혀 있어 일반 방식으로 답합니다";
+        }
+      } else {
+        // Non-stream already worked; treat as connected.
+        if (status) status.textContent = "연결되었습니다 (모델: " + model + ")";
+      }
     }
   }
 
@@ -1169,6 +1418,10 @@
     persistAiSettings(readAiForm());
     const status = $("#ai-settings-status");
     if (status) status.textContent = "저장했습니다. 키는 이 기기에만 남습니다.";
+  });
+  $("#ai-use-stream")?.addEventListener("change", () => {
+    const cur = readAiForm();
+    persistAiSettings(cur);
   });
   $("#ai-settings-clear")?.addEventListener("click", () => {
     clearAiKey();
@@ -1276,8 +1529,13 @@
     askAi,
     testAiConnection,
     renderSafeMarkdown,
+    formatAiError,
+    isNetworkAiError,
+    requestProvider,
     AI_STORAGE_KEY,
     AI_PROVIDERS,
+    get AI_TIMEOUT_MS() { return AI_TIMEOUT_MS; },
+    set AI_TIMEOUT_MS(v) { AI_TIMEOUT_MS = Math.max(1000, Number(v) || 120000); },
     get lastAiText() { return lastAiText; },
     get dataMeta() { return DATA && DATA.meta; },
     get glossMeta() { return glossMeta; },
