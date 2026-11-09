@@ -1,0 +1,55 @@
+{
+  "sources": [
+    {
+      "name": "Unicode Unihan",
+      "fields": "kMandarin, kHanyuPinyin, kHangul, variants",
+      "license": "Unicode Terms of Use",
+      "url": "https://www.unicode.org/license.txt"
+    },
+    {
+      "name": "libhangul hanja.txt",
+      "fields": "Korean 훈음",
+      "license": "BSD-3-Clause",
+      "url": "https://github.com/libhangul/libhangul"
+    },
+    {
+      "name": "Jun Da Modern Chinese Character Frequency List",
+      "fields": "general frequency fallback",
+      "license": "Academic/educational with attribution",
+      "url": "https://lingua.mtsu.edu/chinese-computing/statistics/"
+    },
+    {
+      "name": "wainshine/Chinese-Names-Corpus",
+      "fields": "Chinese_Family_Name TF; given-name char counts from Chinese_Names_Corpus（120W）",
+      "license": "Apache-2.0",
+      "url": "https://github.com/wainshine/Chinese-Names-Corpus"
+    },
+    {
+      "name": "公安部户政管理研究中心 《二〇二〇年全国姓名报告》",
+      "fields": "Top-100 surname order (2020)",
+      "license": "Public government statistical report",
+      "url": "https://www.mps.gov.cn/ (archived 2021-02-08)"
+    },
+    {
+      "name": "CC-CEDICT (MDBG)",
+      "fields": "Chinese word list, pinyin, English definitions (first 3 senses; CL: classifiers omitted)",
+      "license": "CC BY-SA 4.0",
+      "url": "https://www.mdbg.net/chinese/dictionary?page=cc-cedict",
+      "date": "2026-11-06T08:10:12Z",
+      "note": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  ],
+  "stats": {
+    "records": 22210,
+    "unique_chars": 16206,
+    "with_hun": 6858,
+    "syllables": 428,
+    "surnames": 1074,
+    "compounds": 56,
+    "given_chars_with_freq": 2238,
+    "given_name_strings": 71997,
+    "edu1800": 1775,
+    "cedict_entries": 125369,
+    "cedict_date": "2026-11-06T08:10:12Z"
+  }
+}

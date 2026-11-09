@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1b3a5a" />
+  <title>중국 이름 배우기 v1.6</title>
+  <link rel="stylesheet" href="styles.css" />
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="이름옥편"><meta name="mobile-web-app-capable" content="yes"></head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">名</span>
+      <div>
+        <h1>중국 이름 배우기 <small>v1.6</small></h1>
+        <p class="sub">중국 한자·이름·문서 옥편 · 오프라인 사전</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button type="button" id="btn-install" class="ghost install-btn">앱 설치</button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="search" role="tab" aria-selected="true">이름</button>
+      <button type="button" class="tab" data-tab="han" role="tab" aria-selected="false">한자</button>
+      <button type="button" class="tab" data-tab="pinyin" role="tab" aria-selected="false">병음</button>
+      <button type="button" class="tab" data-tab="hangul" role="tab" aria-selected="false">한글</button>
+      <button type="button" class="tab" data-tab="document" role="tab" aria-selected="false">문서</button>
+      <button type="button" class="tab" data-tab="review" role="tab" aria-selected="false">복습 <span id="hist-count" class="count">0</span></button>
+    </nav>
+  </header>
+
+<div class="view global-search">    <section class="panel">
+      <label class="lbl" for="name-input">한자 · 병음 · 한국 독음 · 훈음</label>
+      <div class="search-row">
+        <input id="name-input" type="search" autocomplete="off" spellcheck="false"
+          placeholder="예: 명 / 밝을 명 / 왕소명 / jing / 峣" />
+        <button type="button" id="parse-btn" class="primary">분석</button>
+      </div>
+      <p class="hint" id="search-hint">한글 독음(명)·훈음(밝을 명)·한국식 이름(왕소명, 왕 소명, 구양)도 찾습니다. 두음법칙(이/리, 유/류, 임/림, 노/로)과 복성(구양→欧阳, 제갈→诸葛)을 반영합니다.</p>
+      <div class="examples">
+        <button type="button" class="ex" data-q="명">명</button>
+        <button type="button" class="ex" data-q="밝을 명">밝을 명</button>
+        <button type="button" class="ex" data-q="왕소명">왕소명</button>
+        <button type="button" class="ex" data-q="이">이</button>
+        <button type="button" class="ex" data-q="구양">구양</button>
+        <button type="button" class="ex" data-q="wang xiaoming">wang xiaoming</button>
+      </div>
+    </section></div>
+  <main id="view-search" class="view">
+
+
+    <section id="status" class="status" aria-live="polite">데이터 로딩 중…</section>
+
+    <section id="start-guide" class="panel start-guide">
+      <h2>이 앱으로 할 수 있는 일</h2>
+      <ul>
+        <li><strong>이름</strong> — 병음(wang xiaoming)이나 한글 독음(왕소명)으로 중국 이름을 찾고 조립합니다.</li>
+        <li><strong>한자 · 병음 · 한글</strong> — 글자·병음·한국 독음/훈음으로 옥편을 찾습니다.</li>
+        <li><strong>문서</strong> — 회사 문서 등 중국어 글을 붙여 넣어 단어 병음·독음·영어 뜻을 봅니다. 단어 사전은 이 탭을 처음 열 때 내려받습니다.</li>
+        <li><strong>복습</strong> — 저장한 이름·글자·단어를 다시 보고 플래시카드로 익힙니다. 목록은 이 브라우저에만 남으니 JSON으로 백업하세요.</li>
+      </ul>
+      <p class="hint">휴대폰이나 컴퓨터에 설치하면 홈 화면에서 앱처럼 열 수 있습니다.</p>
+    </section>
+
+    <section id="slots" class="slots" hidden></section>
+
+    <section id="assembled" class="assembled" hidden>
+      <div class="asm-card">
+        <div class="asm-hanzi">
+          <div id="asm-simp" class="asm-simp"></div>
+          <div id="asm-trad" class="asm-trad"></div>
+        </div>
+        <div class="asm-meta">
+          <div id="asm-py" class="asm-py"></div>
+          <div id="asm-ko" class="asm-ko"></div>
+          <div id="asm-hun" class="asm-hun"></div>
+        </div>
+        <button type="button" id="asm-speak" class="play" title="이름 읽기">▶</button>
+      </div>
+      <div class="asm-actions">
+        <button type="button" id="asm-save" class="primary">저장 · 복습 목록에 넣기</button>
+        <p id="asm-saved" class="saved-note" hidden>✓ 복습 목록에 저장됨</p>
+      </div>
+    </section>
+  </main>
+
+
+  <main id="view-document" class="view" hidden>
+    <section class="panel">
+      <label class="lbl" for="doc-input">중국어 문서를 붙여 넣으세요</label>
+      <textarea id="doc-input" rows="7" spellcheck="false" placeholder="예: 本公司将于下周召开董事会会议，讨论银行贷款和会计报表。请各部门负责人准时参加。"></textarea>
+      <div class="doc-toolbar">
+        <button type="button" id="doc-analyze" class="primary">분석</button>
+        <button type="button" id="doc-speak" class="ghost">문장 읽기</button>
+        <label><input type="checkbox" id="doc-toggle-py" checked /> 병음</label>
+        <label><input type="checkbox" id="doc-toggle-eum" checked /> 독음</label>
+        <label><input type="checkbox" id="doc-unknown-only" /> 모르는 항목만 강조</label>
+      </div>
+      <p id="doc-loading" class="status" hidden>단어 사전(CC-CEDICT)을 불러오는 중… 처음 한 번만 내려받으면 이후에는 오프라인에서도 쓸 수 있습니다.</p>
+      <p class="hint">단어를 누르면 영어 뜻(CC-CEDICT)·훈음·독음을 봅니다. 간체·번체, 숫자·영문·문장부호가 섞여 있어도 됩니다.</p>
+      <div class="examples">
+        <button type="button" class="ex doc-ex" data-q="本公司将于下周召开董事会会议，讨论银行贷款和会计报表。请各部门负责人准时参加。">간체 예문</button>
+        <button type="button" class="ex doc-ex" data-q="本公司將於下週召開董事會會議，討論銀行貸款和會計報表。請各部門負責人準時參加。">번체 예문</button>
+      </div>
+    </section>
+    <section id="doc-output" class="doc-output panel" hidden></section>
+    <section id="doc-unknown" class="panel" hidden>
+      <h2>복습 목록에 없는 항목</h2>
+      <p class="hint">아래에서 단어나 글자를 누르면 뜻을 확인하고 저장할 수 있습니다.</p>
+      <div id="doc-unknown-list"></div>
+    </section>
+  </main>
+
+  <main id="view-review" class="view" hidden>
+    <section id="backup-banner" class="panel backup-banner" hidden>
+      <p>복습 목록은 이 브라우저에만 저장됩니다. JSON 파일로 내보내 백업해 두세요.</p>
+      <div class="toolbar-actions">
+        <button type="button" id="backup-export" class="primary">지금 내보내기</button>
+        <button type="button" id="backup-dismiss" class="ghost">나중에</button>
+      </div>
+    </section>
+    <section class="panel review-toolbar">
+      <input id="review-search" type="search" placeholder="한자·병음·한글 검색" />
+      <div class="toolbar-actions">
+        <button type="button" id="btn-flash" class="primary">플래시카드</button>
+        <button type="button" id="btn-export" class="ghost">내보내기</button>
+        <button type="button" id="btn-import" class="ghost">가져오기</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden />
+      </div>
+    </section>
+    <section id="review-list" class="review-list"></section>
+    <section id="review-empty" class="empty-box">아직 저장된 항목이 없습니다. 이름·글자·단어를 고른 뒤 저장 버튼을 누르세요.</section>
+  </main>
+
+  <!-- Flashcard modal -->
+  <div id="flash-modal" class="modal" hidden>
+    <div class="modal-card">
+      <header class="modal-head">
+        <h2>플래시카드 복습</h2>
+        <button type="button" id="flash-close" class="icon-x" aria-label="닫기">×</button>
+      </header>
+      <div class="flash-mode">
+        <button type="button" class="chip active" data-mode="py2han">병음 → 한자</button>
+        <button type="button" class="chip" data-mode="han2py">한자 → 병음</button>
+        <button type="button" class="chip" data-mode="py2ko">병음 → 훈음</button>
+      </div>
+      <div id="flash-progress" class="flash-progress"></div>
+      <button type="button" id="flash-card" class="flash-card">
+        <div id="flash-front" class="flash-front"></div>
+        <div id="flash-back" class="flash-back" hidden></div>
+        <p class="flash-tap">탭하여 뒤집기</p>
+      </button>
+      <div class="flash-actions">
+        <button type="button" id="flash-unknown" class="danger">모름</button>
+        <button type="button" id="flash-speak" class="ghost">▶ 듣기</button>
+        <button type="button" id="flash-known" class="ok">알았음</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <details>
+      <summary>데이터 · 라이선스</summary>
+      <div id="credits"></div>
+    </details>
+  </footer>
+  <script src="app.js"></script><script src="dictionary.js"></script><script src="document.js"></script>
+<script src="pwa.js"></script></body>
+</html>
