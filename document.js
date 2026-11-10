@@ -313,6 +313,32 @@
   document.body.append(overlay);
 
   let tokens = [];
+  let lastAnalyzedText = null;
+  let aiGeneration = 0;
+
+  function beginAiGeneration() {
+    aiGeneration += 1;
+    return aiGeneration;
+  }
+
+  function isAnalysisCurrent() {
+    return lastAnalyzedText !== null && lastAnalyzedText === input.value;
+  }
+
+  async function ensureCurrentAnalysis(opts) {
+    if (!isAnalysisCurrent()) await analyze(opts);
+  }
+
+  function invalidateStaleAnalysis() {
+    if (isAnalysisCurrent()) return;
+    beginAiGeneration();
+    hideAiResult();
+    if (tokens.length || lastAnalyzedText !== null) {
+      tokens = [];
+      lastAnalyzedText = null;
+      renderOutput();
+    }
+  }
 
   function reviewSets() {
     const hist = window.nameAppBridge?.getHistory?.() || [];
@@ -457,6 +483,8 @@
       output.hidden = true;
       output.innerHTML = "";
       unknownBox.hidden = true;
+      if (unknownList) unknownList.innerHTML = "";
+      renderSummary();
       return;
     }
     output.hidden = false;
@@ -664,10 +692,12 @@
     if (!(opts && opts.keepAi)) hideAiResult();
     if (!text.trim()) {
       tokens = [];
+      lastAnalyzedText = text;
       renderOutput();
       return;
     }
     tokens = tokenize(text);
+    lastAnalyzedText = text;
     renderOutput();
   }
 
@@ -817,6 +847,7 @@
   }
 
   function hideAiResult() {
+    beginAiGeneration();
     if (aiAbort) {
       aiAbort.abort();
       aiAbort = null;
@@ -1266,27 +1297,39 @@
       askBtn.disabled = true;
       askBtn.textContent = "답변 받는 중…";
     }
+    try {
+      await ensureCurrentAnalysis({ keepAi: false });
+    } catch (err) {
+      if (askBtn) {
+        askBtn.disabled = false;
+        askBtn.textContent = askLabel || "AI에게 묻기";
+      }
+      throw err;
+    }
+    const gen = beginAiGeneration();
+    const stillThisAsk = () => gen === aiGeneration;
     showAiLoading("답변을 받는 중…");
     const resultBox = $("#doc-ai-result");
     if (resultBox) resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
     try {
-      if (!tokens.length) await analyze({ keepAi: true });
       const provider = AI_PROVIDERS[settings.provider] || AI_PROVIDERS.xai;
       const prompt = buildAiPrompt();
       if (aiAbort) aiAbort.abort();
       aiAbort = new AbortController();
       const signal = aiAbort.signal;
       const useStream = !settings.noStream;
+      const onDelta = (full) => { if (stillThisAsk()) renderAiAnswer(full, true); };
       let answer;
       if (useStream) {
         try {
           answer = await requestProvider(provider, settings, prompt, {
             stream: true,
             signal,
-            onDelta: (full) => renderAiAnswer(full, true),
+            onDelta,
           });
         } catch (err) {
           if (err && err.name === "AbortError") throw err;
+          if (!stillThisAsk()) throw (err && err.name === "AbortError" ? err : new DOMException("Aborted", "AbortError"));
           if (isNetworkAiError(err)) {
             const hadPartial = !!(lastAiText && String(lastAiText).trim());
             settings = rememberNoStream(settings);
@@ -1299,7 +1342,7 @@
             answer = await requestProvider(provider, settings, prompt, {
               stream: false,
               signal,
-              onDelta: (full) => renderAiAnswer(full, true),
+              onDelta,
             });
           } else {
             throw err;
@@ -1309,12 +1352,14 @@
         answer = await requestProvider(provider, settings, prompt, {
           stream: false,
           signal,
-          onDelta: (full) => renderAiAnswer(full, true),
+          onDelta,
         });
       }
+      if (!stillThisAsk()) return;
       renderAiAnswer(answer, false);
     } catch (err) {
       if (err && err.name === "AbortError") return;
+      if (!stillThisAsk()) return;
       showFormattedAiError(err);
     } finally {
       if (askBtn) {
@@ -1386,6 +1431,7 @@
   }
 
   $("#doc-analyze").addEventListener("click", () => { analyze(); });
+  input.addEventListener("input", () => { invalidateStaleAnalysis(); });
   $("#doc-ask-ai")?.addEventListener("click", () => { askAi(); });
   $("#doc-copy-prompt")?.addEventListener("click", async () => {
     const text = (input.value || "").trim();
@@ -1393,7 +1439,7 @@
       showToast("먼저 글을 붙여 넣으세요");
       return;
     }
-    if (!tokens.length) await analyze({ keepAi: true });
+    await ensureCurrentAnalysis({ keepAi: true });
     const ok = await copyText(buildAiPrompt());
     showToast(ok ? "복사됨 — AI 채팅에 붙여넣으세요" : "복사하지 못했습니다");
   });
@@ -1538,6 +1584,8 @@
     get AI_TIMEOUT_MS() { return AI_TIMEOUT_MS; },
     set AI_TIMEOUT_MS(v) { AI_TIMEOUT_MS = Math.max(1000, Number(v) || 120000); },
     get lastAiText() { return lastAiText; },
+    get lastAnalyzedText() { return lastAnalyzedText; },
+    isAnalysisCurrent,
     get dataMeta() { return DATA && DATA.meta; },
     get glossMeta() { return glossMeta; },
     get size() { return DATA ? DATA.e.length : 0; },
