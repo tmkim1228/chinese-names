@@ -141,7 +141,11 @@
     return `${String.fromCodePoint(0x2f00 + n - 1)} · 제${n}부수${m[2] ? " (간화 부수)" : ""} · 나머지 ${m[3]}획`;
   }
   function content(r, detail = false) {
-    return `<div><span class="dict-glyph" data-detail="${esc(r.c)}">${esc(r.c)}</span>${r.t ? `정자 <b data-detail="${esc(r.t)}">${esc(r.t)}</b>` : ""} ${r.v.length ? "이체 " + r.v.map(esc).join(" · ") : ""}</div><p class="dict-py">${r.p.map(esc).join(" · ")}</p><p><b>${esc(r.h.join(" / ") || "훈음 자료 없음")}</b></p><p>한자음 · ${esc(r.e.join(" · ") || "자료 없음")}</p>${detail ? `<p>부수 · ${radical(r)}<br>총획 · ${esc(r.st || "정보 없음")}</p>` : ""}<p class="dict-small">${r.sur ? "성씨 사용 · " : ""}이름 말뭉치 ${r.g.toLocaleString()}회 · ${r.edu ? "교육 1800 · " : ""}${r.hsk ? "HSK " + esc(r.hsk) + " · " : ""}${r.f < 999999 ? "일반 빈도 #" + r.f : "일반 빈도 미상"}</p>`;
+    const tradHtml = r.t
+      ? `<span class="dict-trad"><span class="dict-trad-label">정자</span><b class="dict-trad-glyph" data-detail="${esc(r.t)}">${esc(r.t)}</b></span>`
+      : "";
+    const varHtml = r.v.length ? `<span class="dict-variants">이체 ${r.v.map(esc).join(" · ")}</span>` : "";
+    return `<div class="dict-glyph-row"><span class="dict-glyph" data-detail="${esc(r.c)}">${esc(r.c)}</span>${tradHtml}${varHtml}</div><p class="dict-py">${r.p.map(esc).join(" · ")}</p><p><b>${esc(r.h.join(" / ") || "훈음 자료 없음")}</b></p><p>한자음 · ${esc(r.e.join(" · ") || "자료 없음")}</p>${detail ? `<p>부수 · ${radical(r)}<br>총획 · ${esc(r.st || "정보 없음")}</p>` : ""}<p class="dict-small">${r.sur ? "성씨 사용 · " : ""}이름 말뭉치 ${r.g.toLocaleString()}회 · ${r.edu ? "교육 1800 · " : ""}${r.hsk ? "HSK " + esc(r.hsk) + " · " : ""}${r.f < 999999 ? "일반 빈도 #" + r.f : "일반 빈도 미상"}</p>`;
   }
   function showDetail(ch) {
     const r = D[ch] || all.find((x) => x.c === ch || x.t === ch);

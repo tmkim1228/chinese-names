@@ -13,8 +13,10 @@
   --radius: 16px;
   --font: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
   --han: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  --text-scale: 1.25;
 }
 * { box-sizing: border-box; }
+html { font-size: calc(100% * var(--text-scale)); }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); }
 body { min-height: 100dvh; }
 .top { max-width: 920px; margin: 0 auto; padding: 1rem 1rem 0.4rem; }
@@ -352,4 +354,65 @@ button.doc-sum-item:hover, button.doc-sum-item:focus { background: #eef4ff; }
   width: 1.05rem;
   height: 1.05rem;
   accent-color: var(--brand2);
+}
+
+
+/* v2.3: 정자 glyph is 55% of the main .dict-glyph; label stays readable in rem. */
+.dict-glyph-row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.15em 0.4em;
+  font-size: 2.8rem;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1;
+}
+.dict-detail .dict-glyph-row { font-size: 4rem; }
+.dict-glyph-row .dict-glyph {
+  font-family: var(--han);
+  font-weight: 700;
+  font-size: 1em;
+  line-height: 1;
+  margin-right: 0;
+}
+.dict-detail .dict-glyph-row .dict-glyph { font-size: 1em; }
+.dict-trad {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 1em;
+  line-height: 1;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.dict-trad-label {
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.2;
+  margin-bottom: 0.12rem;
+  white-space: nowrap;
+}
+.dict-trad-glyph {
+  font-family: var(--han);
+  font-weight: 700;
+  font-size: 0.55em;
+  line-height: 1;
+  font-style: normal;
+  color: var(--ink);
+}
+.dict-variants {
+  font-size: 0.95rem;
+  color: var(--muted);
+  align-self: flex-end;
+  padding-bottom: 0.15em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 400px) {
+  .dict-detail { padding: 0.9rem; }
+  .dict-detail .dict-glyph-row { font-size: 3.4rem; }
 }
