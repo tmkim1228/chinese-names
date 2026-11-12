@@ -416,3 +416,15 @@ button.doc-sum-item:hover, button.doc-sum-item:focus { background: #eef4ff; }
   .dict-detail { padding: 0.9rem; }
   .dict-detail .dict-glyph-row { font-size: 3.4rem; }
 }
+
+.doc-ai-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-top: .4rem;
+}
+.doc-ai-status-row #doc-ai-status { margin: 0; flex: 1 1 auto; }
+.doc-ai-cancel { padding: .4rem .85rem; }
+#doc-ai-fast-retry { font-weight: 700; }
