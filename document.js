@@ -703,8 +703,23 @@
 
 
   const AI_STORAGE_KEY = "chinese-name-app.ai.v1";
-  const AI_SYSTEM = "당신은 중국어 문서와 소프트웨어·업무용 UI 문구를 한국어로 정확하게 설명하는 도우미입니다. 요청한 형식을 지키고 한국어로 답하세요.";
+  const AI_SYSTEM = "당신은 중국어 문서와 소프트웨어·업무용 UI 문구를 한국어로 정확하게 설명하는 도우미입니다. 요청한 형식을 지키고 한국어로 간결하게 답하세요.";
   let AI_TIMEOUT_MS = 120000;
+  let AI_NONSTREAM_TIMEOUT_MS = 180000;
+  const AI_ASK_MAX_TOKENS = 1600;
+  const AI_MODEL_CHOICES = {
+    xai: [
+      { id: "grok-4.7", label: "grok-4.7 (기본)" },
+      { id: "grok-4.3", label: "grok-4.3 (빠른 모델)" },
+    ],
+    openai: [
+      { id: "gpt-4o-mini", label: "gpt-4o-mini (기본)" },
+    ],
+    gemini: [
+      { id: "gemini-3.8-flash", label: "gemini-3.8-flash (기본)" },
+    ],
+  };
+  const AI_FAST_MODEL = { xai: "grok-4.3" };
   const AI_PROVIDERS = {
     xai: {
       id: "xai",
@@ -734,6 +749,83 @@
 
   let lastAiText = "";
   let aiAbort = null;
+  let aiCancelRequested = false;
+  let waitClockId = null;
+  let waitClockStarted = 0;
+  let waitClockPrefix = "";
+
+  function fillModelOptions(providerId, selected) {
+    const sel = $("#ai-model");
+    if (!sel) return;
+    const pid = AI_PROVIDERS[providerId] ? providerId : "xai";
+    const choices = (AI_MODEL_CHOICES[pid] || []).map((c) => ({ id: c.id, label: c.label }));
+    const want = String(selected || "").trim();
+    if (want && !choices.some((c) => c.id === want)) {
+      choices.push({ id: want, label: want });
+    }
+    sel.innerHTML = choices.map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("");
+    const pick = want && choices.some((c) => c.id === want) ? want : ((choices[0] && choices[0].id) || "");
+    sel.value = pick;
+    const hint = $("#ai-model-hint");
+    if (hint) {
+      hint.hidden = pid !== "xai";
+    }
+  }
+
+  function fastModelFor(providerId, current) {
+    const fast = AI_FAST_MODEL[providerId];
+    if (!fast) return "";
+    return String(current || "").trim() === fast ? "" : fast;
+  }
+
+  function reasoningEffortFor(provider, model) {
+    if (!provider || provider.id !== "xai") return "";
+    const m = String(model || "").trim().toLowerCase();
+    if (/^grok-4\.3(\b|$|-)/.test(m)) return "none";
+    if (/^grok-4\.(5|6|7)(\b|$|-)/.test(m)) return "low";
+    return "";
+  }
+
+  function timeoutDetail(provider, model, stream, elapsedMs) {
+    const label = (provider && provider.label) || (provider && provider.id) || "AI";
+    const mode = stream ? "스트리밍" : "일반 방식";
+    const sec = Math.max(1, Math.round(Number(elapsedMs || 0) / 1000));
+    return [label, model, mode, sec + "초"].filter(Boolean).join(" · ");
+  }
+
+  function stopWaitClock() {
+    if (waitClockId) {
+      clearInterval(waitClockId);
+      waitClockId = null;
+    }
+  }
+
+  function startWaitClock(prefix) {
+    waitClockPrefix = prefix || "답을 기다리는 중…";
+    if (!waitClockStarted) waitClockStarted = Date.now();
+    const tick = () => {
+      const sec = Math.max(0, Math.floor((Date.now() - waitClockStarted) / 1000));
+      setAiStatus(waitClockPrefix + " " + sec + "초", true);
+    };
+    stopWaitClock();
+    tick();
+    waitClockId = setInterval(tick, 250);
+  }
+
+  function resetWaitClock(prefix) {
+    waitClockStarted = Date.now();
+    startWaitClock(prefix);
+  }
+
+  function setCancelVisible(on) {
+    const b = $("#doc-ai-cancel");
+    if (b) b.hidden = !on;
+  }
+
+  function setFastRetryVisible(on) {
+    const b = $("#doc-ai-fast-retry");
+    if (b) b.hidden = !on;
+  }
 
   class AiError extends Error {
     constructor(message, status, detail) {
@@ -821,7 +913,7 @@
     if (!modal) return;
     const s = loadAiSettings();
     if ($("#ai-provider")) $("#ai-provider").value = s.provider;
-    if ($("#ai-model")) $("#ai-model").value = s.model;
+    fillModelOptions(s.provider, s.model);
     if ($("#ai-key")) {
       $("#ai-key").value = s.key;
       $("#ai-key").type = "password";
@@ -848,6 +940,10 @@
 
   function hideAiResult() {
     beginAiGeneration();
+    stopWaitClock();
+    waitClockStarted = 0;
+    setCancelVisible(false);
+    setFastRetryVisible(false);
     if (aiAbort) {
       aiAbort.abort();
       aiAbort = null;
@@ -953,6 +1049,8 @@
     const ans = $("#doc-ai-answer");
     if (ans) ans.innerHTML = "";
     lastAiText = "";
+    setFastRetryVisible(false);
+    setCancelVisible(true);
   }
 
   function setAiStatus(msg, loading) {
@@ -970,6 +1068,11 @@
   function renderAiAnswer(text, loading) {
     const box = $("#doc-ai-result");
     if (!box) return;
+    if (!loading) {
+      stopWaitClock();
+      waitClockStarted = 0;
+      setCancelVisible(false);
+    }
     box.hidden = false;
     box.classList.toggle("is-loading", !!loading);
     const status = $("#doc-ai-status");
@@ -993,6 +1096,9 @@
   function showAiError(msg, detail) {
     const box = $("#doc-ai-result");
     if (!box) return;
+    stopWaitClock();
+    waitClockStarted = 0;
+    setCancelVisible(false);
     box.hidden = false;
     box.classList.remove("is-loading");
     const status = $("#doc-ai-status");
@@ -1067,7 +1173,7 @@
     if (err && err.message && !/^(http|network|empty|timeout)$/i.test(err.message)) {
       parts.push(String(err.message));
     } else if (err && err.message === "timeout") {
-      parts.push("timeout");
+      if (!err.detail) parts.push("timeout");
     } else if (err && err.message === "network") {
       parts.push("network");
     } else if (err && err.name === "TypeError") {
@@ -1078,9 +1184,12 @@
     return { message, detail };
   }
 
-  function showFormattedAiError(err) {
+  function showFormattedAiError(err, ctx) {
     const formatted = formatAiError(err);
     showAiError(formatted.message, formatted.detail);
+    const providerId = (ctx && ctx.providerId) || (loadAiSettings().provider);
+    const model = (ctx && ctx.model) || loadAiSettings().model;
+    setFastRetryVisible(!!(isTimeoutError(err) && fastModelFor(providerId, model)));
   }
 
   async function readHttpErrorDetail(res) {
@@ -1195,13 +1304,18 @@
     const stream = !!(opts && opts.stream);
     const parentSignal = opts && opts.signal;
     const onDelta = opts && opts.onDelta;
-    const maxTokens = opts && opts.maxTokens;
+    const maxTokens = (opts && opts.maxTokens != null) ? opts.maxTokens : AI_ASK_MAX_TOKENS;
     const requireText = !(opts && opts.requireText === false);
-    const timeoutMs = (opts && opts.timeoutMs != null) ? Number(opts.timeoutMs) : AI_TIMEOUT_MS;
+    const defaultTimeout = stream ? AI_TIMEOUT_MS : AI_NONSTREAM_TIMEOUT_MS;
+    const timeoutMs = (opts && opts.timeoutMs != null) ? Number(opts.timeoutMs) : defaultTimeout;
     const model = (settings.model || provider.defaultModel).trim();
+    const effort = (opts && opts.skipReasoningEffort) ? "" : reasoningEffortFor(provider, model);
+    const startedAt = Date.now();
+    const makeTimeout = () => new AiError("timeout", 0, timeoutDetail(provider, model, stream, Date.now() - startedAt));
+
     let url;
     let headers;
-    let body;
+    let payloadObj = null;
     if (provider.kind === "gemini") {
       const action = stream ? "streamGenerateContent" : "generateContent";
       url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":" + action;
@@ -1212,18 +1326,18 @@
       };
       const generationConfig = { temperature: 0.3 };
       if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
-      body = JSON.stringify({
+      payloadObj = {
         systemInstruction: { parts: [{ text: AI_SYSTEM }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig,
-      });
+      };
     } else {
       url = provider.endpoint;
       headers = {
         "Content-Type": "application/json",
         Authorization: "Bearer " + settings.key,
       };
-      const payload = {
+      payloadObj = {
         model,
         messages: [
           { role: "system", content: AI_SYSTEM },
@@ -1232,18 +1346,20 @@
         temperature: 0.3,
         stream,
       };
-      if (maxTokens) payload.max_tokens = maxTokens;
-      // Do not send reasoning_effort / presence_penalty / frequency_penalty / stop:
-      // grok-4 family has historically rejected unsupported args with HTTP 400.
-      body = JSON.stringify(payload);
+      if (maxTokens) payloadObj.max_tokens = maxTokens;
+      // Only for models documented to support it: grok-4.7/4.6/4.5 default to
+      // high reasoning; sending "low" cuts latency. grok-4.3 accepts "none".
+      // Do not send presence_penalty / frequency_penalty / stop.
+      if (effort) payloadObj.reasoning_effort = effort;
     }
+    const body = JSON.stringify(payloadObj);
 
     const timeoutCtrl = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       try { timeoutCtrl.abort(new DOMException("timeout", "TimeoutError")); } catch { timeoutCtrl.abort(); }
-    }, Math.max(1000, timeoutMs || AI_TIMEOUT_MS));
+    }, Math.max(1000, timeoutMs || defaultTimeout));
     const signal = combineAbortSignals(parentSignal, timeoutCtrl.signal);
 
     let res;
@@ -1253,7 +1369,7 @@
       clearTimeout(timer);
       if (parentSignal && parentSignal.aborted && !timedOut) throw (err && err.name === "AbortError" ? err : new DOMException("Aborted", "AbortError"));
       if (timedOut || isTimeoutError(err) || (err && err.name === "AbortError" && timedOut)) {
-        throw new AiError("timeout", 0, "timeout " + timeoutMs + "ms");
+        throw makeTimeout();
       }
       if (err && err.name === "AbortError") throw err;
       throw new AiError((err && err.message) || "network", 0, truncateDetail(err && err.message));
@@ -1262,6 +1378,14 @@
     if (!res.ok) {
       clearTimeout(timer);
       const detail = await readHttpErrorDetail(res);
+      if (
+        res.status === 400 &&
+        effort &&
+        !(opts && opts.skipReasoningEffort) &&
+        /reasoning/i.test(detail || "")
+      ) {
+        return requestProvider(provider, settings, prompt, Object.assign({}, opts, { skipReasoningEffort: true }));
+      }
       throw new AiError("http", res.status, detail);
     }
 
@@ -1274,7 +1398,7 @@
       clearTimeout(timer);
       if (err instanceof AiError) throw err;
       if (parentSignal && parentSignal.aborted && !timedOut) throw err;
-      if (timedOut || isTimeoutError(err)) throw new AiError("timeout", 0, "timeout " + timeoutMs + "ms");
+      if (timedOut || isTimeoutError(err)) throw makeTimeout();
       if (err && err.name === "AbortError") throw err;
       throw new AiError((err && err.message) || "network", 0, truncateDetail(err && err.message));
     }
@@ -1308,7 +1432,10 @@
     }
     const gen = beginAiGeneration();
     const stillThisAsk = () => gen === aiGeneration;
-    showAiLoading("답변을 받는 중…");
+    aiCancelRequested = false;
+    waitClockStarted = 0;
+    showAiLoading("답을 기다리는 중…");
+    startWaitClock("답을 기다리는 중…");
     const resultBox = $("#doc-ai-result");
     if (resultBox) resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
     try {
@@ -1319,49 +1446,65 @@
       const signal = aiAbort.signal;
       const useStream = !settings.noStream;
       const onDelta = (full) => { if (stillThisAsk()) renderAiAnswer(full, true); };
+      const ctx = { providerId: provider.id, model: settings.model || provider.defaultModel };
+      async function once(stream) {
+        return requestProvider(provider, settings, prompt, {
+          stream,
+          signal,
+          onDelta,
+        });
+      }
+      async function withTimeoutRetry(stream) {
+        try {
+          return await once(stream);
+        } catch (err) {
+          if (err && err.name === "AbortError") throw err;
+          if (!stillThisAsk()) throw (err && err.name === "AbortError" ? err : new DOMException("Aborted", "AbortError"));
+          if (!isTimeoutError(err)) throw err;
+          startWaitClock("시간이 초과되어 다시 시도하는 중…");
+          return await once(false);
+        }
+      }
       let answer;
       if (useStream) {
         try {
-          answer = await requestProvider(provider, settings, prompt, {
-            stream: true,
-            signal,
-            onDelta,
-          });
+          answer = await withTimeoutRetry(true);
         } catch (err) {
           if (err && err.name === "AbortError") throw err;
           if (!stillThisAsk()) throw (err && err.name === "AbortError" ? err : new DOMException("Aborted", "AbortError"));
           if (isNetworkAiError(err)) {
             const hadPartial = !!(lastAiText && String(lastAiText).trim());
             settings = rememberNoStream(settings);
-            setAiStatus("다른 방식으로 다시 시도하는 중…", true);
+            startWaitClock("다른 방식으로 다시 시도하는 중…");
             if (hadPartial) {
               const ans = $("#doc-ai-answer");
               if (ans) ans.innerHTML = "";
               lastAiText = "";
             }
-            answer = await requestProvider(provider, settings, prompt, {
-              stream: false,
-              signal,
-              onDelta,
-            });
+            answer = await withTimeoutRetry(false);
           } else {
             throw err;
           }
         }
       } else {
-        answer = await requestProvider(provider, settings, prompt, {
-          stream: false,
-          signal,
-          onDelta,
-        });
+        answer = await withTimeoutRetry(false);
       }
       if (!stillThisAsk()) return;
       renderAiAnswer(answer, false);
     } catch (err) {
-      if (err && err.name === "AbortError") return;
+      if (aiCancelRequested || (err && err.name === "AbortError")) {
+        if (aiCancelRequested && stillThisAsk()) {
+          stopWaitClock();
+          waitClockStarted = 0;
+          setCancelVisible(false);
+          setAiStatus("취소했습니다", false);
+        }
+        return;
+      }
       if (!stillThisAsk()) return;
-      showFormattedAiError(err);
+      showFormattedAiError(err, { providerId: settings.provider, model: settings.model });
     } finally {
+      setCancelVisible(false);
       if (askBtn) {
         askBtn.disabled = false;
         askBtn.textContent = askLabel || "AI에게 묻기";
@@ -1451,7 +1594,7 @@
   });
   $("#ai-provider")?.addEventListener("change", () => {
     const p = AI_PROVIDERS[$("#ai-provider").value];
-    if (p && $("#ai-model")) $("#ai-model").value = p.defaultModel;
+    if (p) fillModelOptions(p.id, p.defaultModel);
   });
   $("#ai-key-toggle")?.addEventListener("click", () => {
     const inp = $("#ai-key");
@@ -1485,6 +1628,42 @@
     showToast(ok ? "복사됨" : "복사하지 못했습니다");
   });
   $("#doc-ai-retry")?.addEventListener("click", () => { askAi(); });
+  $("#doc-ai-cancel")?.addEventListener("click", () => {
+    aiCancelRequested = true;
+    beginAiGeneration();
+    if (aiAbort) {
+      aiAbort.abort();
+      aiAbort = null;
+    }
+    stopWaitClock();
+    waitClockStarted = 0;
+    setCancelVisible(false);
+    const box = $("#doc-ai-result");
+    if (box) box.classList.remove("is-loading");
+    setAiStatus("취소했습니다", false);
+    const askBtn = $("#doc-ask-ai");
+    if (askBtn) {
+      askBtn.disabled = false;
+      if (askBtn.textContent.includes("받는 중")) askBtn.textContent = "AI에게 묻기";
+    }
+  });
+  $("#doc-ai-fast-retry")?.addEventListener("click", () => {
+    const cur = loadAiSettings();
+    const fast = fastModelFor(cur.provider, cur.model);
+    if (!fast) {
+      askAi();
+      return;
+    }
+    persistAiSettings({
+      provider: cur.provider,
+      model: fast,
+      key: cur.key,
+      noStream: cur.noStream,
+    });
+    fillModelOptions(cur.provider, fast);
+    setFastRetryVisible(false);
+    askAi();
+  });
   $("#doc-copy-summary")?.addEventListener("click", async () => {
     if (!tokens.length) {
       showToast("먼저 분석을 눌러 주세요");
@@ -1553,6 +1732,8 @@
     buildGlosses(window.__KOGLOSSES__);
   }
 
+  fillModelOptions((loadAiSettings().provider), loadAiSettings().model);
+
   window.documentApp = {
     get ready() { return true; },
     get wordsReady() { return !!DATA; },
@@ -1582,8 +1763,19 @@
     AI_STORAGE_KEY,
     AI_PROVIDERS,
     get AI_TIMEOUT_MS() { return AI_TIMEOUT_MS; },
-    set AI_TIMEOUT_MS(v) { AI_TIMEOUT_MS = Math.max(1000, Number(v) || 120000); },
+    set AI_TIMEOUT_MS(v) {
+      AI_TIMEOUT_MS = Math.max(1000, Number(v) || 120000);
+      if (AI_TIMEOUT_MS < 180000) AI_NONSTREAM_TIMEOUT_MS = AI_TIMEOUT_MS;
+    },
+    get AI_NONSTREAM_TIMEOUT_MS() { return AI_NONSTREAM_TIMEOUT_MS; },
+    set AI_NONSTREAM_TIMEOUT_MS(v) { AI_NONSTREAM_TIMEOUT_MS = Math.max(1000, Number(v) || 180000); },
     get lastAiText() { return lastAiText; },
+    AI_MODEL_CHOICES,
+    AI_FAST_MODEL,
+    AI_ASK_MAX_TOKENS,
+    fillModelOptions,
+    fastModelFor,
+    reasoningEffortFor,
     get lastAnalyzedText() { return lastAnalyzedText; },
     isAnalysisCurrent,
     get dataMeta() { return DATA && DATA.meta; },
