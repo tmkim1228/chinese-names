@@ -526,7 +526,10 @@
     list.innerHTML = rows.map(({ tok, i }) => {
       const ko = koGlossFor(tok);
       const src = ko ? "한국어 뜻" : "English";
-      return `<li><button type="button" class="doc-sum-item" data-tok="${i}"><span class="doc-sum-line">${esc(formatWordLine(tok))}</span> <small class="doc-sum-src">${src}</small></button></li>`;
+      const saved = isWordSaved(tok);
+      const saveCls = saved ? " is-saved" : "";
+      const saveLabel = saved ? "✓ 복습에 추가" : "복습에 추가";
+      return `<li class="doc-sum-row"><button type="button" class="doc-sum-item" data-tok="${i}"><span class="doc-sum-line">${esc(formatWordLine(tok))}</span> <small class="doc-sum-src">${src}</small></button><button type="button" class="ghost doc-sum-save${saveCls}" data-save-review="${i}">${saveLabel}</button></li>`;
     }).join("");
   }
 
@@ -614,7 +617,25 @@
       chars,
       known: null,
       query: (input.value || "").replace(/\s+/g, " ").slice(0, 80),
+      meaningKo: koGlossFor(tok) || "",
+      meaningEn: englishFallback(tok) || ((rec && rec.d && rec.d.length) ? rec.d.join(" · ") : ""),
+      examples: (function () {
+        const src = (input.value || "").replace(/\s+/g, " ").trim();
+        const cut = window.NameSrs ? window.NameSrs.excerpt(src, surface || simp, 80) : src.slice(0, 80);
+        return cut ? [cut] : [];
+      })(),
     };
+  }
+
+  function isWordSaved(tok) {
+    if (!tok || !window.nameAppBridge?.isSavedId) return false;
+    return !!window.nameAppBridge.isSavedId(makeSaveEntry(tok).id);
+  }
+  function saveWordFromDoc(tok) {
+    if (!tok || !window.nameAppBridge) return { saved: false };
+    const entry = makeSaveEntry(tok);
+    window.nameAppBridge.save(entry);
+    return { saved: true };
   }
 
   function showPanel(tok) {
@@ -674,10 +695,10 @@
       <h3 class="doc-sub">글자별 훈음 · 독음</h3>
       <div class="doc-panel-chars">${charHtml}</div>
       <div class="dict-tools">
-        <button class="primary" data-saveword ${canSave ? "" : "disabled"}>★ 단어 저장</button>
+        <button class="primary" data-saveword data-save-review ${canSave ? "" : "disabled"}>${isWordSaved(tok) ? "✓ 복습에 추가" : "복습에 추가"}</button>
         <button class="ghost" data-audio="${esc(simp)}">▶ 중국어 듣기</button>
       </div>
-      <p id="doc-save-note"></p>`;
+      <p id="doc-save-note">${isWordSaved(tok) ? "✓ 복습 목록에 저장됨" : ""}</p>`;
     overlay.hidden = false;
     overlay.dataset.tok = String(tokens.indexOf(tok));
   }
@@ -1673,6 +1694,18 @@
     showToast(ok ? "복사됨" : "복사하지 못했습니다");
   });
   $("#doc-summary-list")?.addEventListener("click", (e) => {
+    const saveBtn = e.target.closest("[data-save-review]");
+    if (saveBtn) {
+      e.preventDefault();
+      const tok = tokens[Number(saveBtn.dataset.saveReview)];
+      if (tok) {
+        const res = saveWordFromDoc(tok);
+        renderOutput();
+        applyToggles();
+        showToast("복습 목록에 넣었습니다");
+      }
+      return;
+    }
     const btn = e.target.closest("[data-tok]");
     if (!btn) return;
     const tok = tokens[Number(btn.dataset.tok)];
@@ -1712,14 +1745,16 @@
       overlay.hidden = true;
       return;
     }
-    if (e.target.closest("[data-saveword]")) {
+    const saveBtn = e.target.closest("[data-saveword], [data-save-review]");
+    if (saveBtn) {
       const i = Number(overlay.dataset.tok);
       const tok = tokens[i];
       if (!tok) return;
-      window.nameAppBridge.save(makeSaveEntry(tok));
+      const res = saveWordFromDoc(tok);
       const note = $("#doc-save-note");
       if (note) note.textContent = "✓ 복습 목록에 저장됨";
-      e.target.closest("[data-saveword]").textContent = "✓ 저장됨";
+      saveBtn.textContent = "✓ 복습에 추가";
+      saveBtn.classList.add("is-saved");
       renderOutput();
       applyToggles();
     }

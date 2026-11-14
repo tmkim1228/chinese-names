@@ -330,11 +330,27 @@
   function lookup(ch) {
     return D[ch] || all.find((x) => x.c === ch || x.t === ch) || null;
   }
+  function sampleEntries(n, exclude) {
+    const count = Math.max(0, Number(n) || 0);
+    const pool = all.filter((r) => r.c !== exclude && r.t !== exclude);
+    const out = [];
+    const used = new Set();
+    const take = Math.min(count, pool.length);
+    let guard = 0;
+    while (out.length < take && guard++ < pool.length * 3) {
+      const r = pool[Math.floor(Math.random() * pool.length)];
+      if (!r || used.has(r.c)) continue;
+      used.add(r.c);
+      out.push(r);
+    }
+    return out;
+  }
   window.dictionaryApp = {
     ready: true,
     showDetail,
     search,
     lookup,
+    sampleEntries,
     eumList,
     eumSet,
     eumsOf,

@@ -1,7 +1,8 @@
-const CACHE = "name-dictionary-v2.4-20261111";
+const CACHE = "name-dictionary-v2.5-20261114";
 const FILES = [
   "./",
   "./index.html",
+  "./srs.js",
   "./app.js",
   "./dictionary.js",
   "./document.js",
