@@ -151,8 +151,9 @@
     const r = D[ch] || all.find((x) => x.c === ch || x.t === ch);
     if (!r) return;
     detailChar = ch;
-    $("#detail-body").innerHTML = content(r, true) + `<div class="dict-tools"><button class="primary" data-savechar>글자 저장</button><button class="ghost" data-audio="${esc(r.c)}">▶ 중국어 듣기</button></div><p id="detail-note"></p><p class="dict-small">Unihan · libhangul · Jun Da · Chinese-Names-Corpus. 다독음·간번 변환은 문맥에 따라 달라집니다.</p>`;
+    $("#detail-body").innerHTML = content(r, true) + `<div class="dict-tools"><button class="primary" data-savechar>글자 저장</button><button class="ghost" data-audio="${esc(r.c)}">▶ 중국어 듣기</button></div><p id="detail-note"></p><div class="hd-mount" data-hd-han="${esc(r.c)}"></div><p class="dict-small">Unihan · libhangul · Jun Da · Chinese-Names-Corpus. 다독음·간번 변환은 문맥에 따라 달라집니다. HANZI DAILY 풀이가 있는 글자는 위에 구성·연결·기억이 나타납니다.</p>`;
     overlay.hidden = false;
+    if (window.hanziDaily) window.hanziDaily.mountAll(overlay);
   }
   function selectMode(m) {
     mode = m;
@@ -167,6 +168,7 @@
     const gsearch = document.querySelector(".global-search");
     if (gsearch) gsearch.hidden = m === "document";
     dictView.hidden = !(m === "han" || m === "pinyin" || m === "hangul");
+    if (!dictView.hidden && window.hanziDaily) window.hanziDaily.ensure().catch(() => {});
     const input = $("#name-input");
     if (input && PLACEHOLDER[m]) input.placeholder = PLACEHOLDER[m];
     const hint = $("#search-hint");
@@ -182,7 +184,7 @@
     return `<section class="panel"><h2>${esc(simp)}${simp !== trad ? " / " + esc(trad) : ""}</h2><p>${esc(py)} · <b>${esc(ko)}</b></p><p>${rs.map((r) => esc(r.h[0] || "훈음 없음")).join(" · ")}</p><button class="primary" data-savename="${esc(chars.join(""))}">이름 저장</button> <button class="ghost" data-audio="${esc(simp)}">▶ 듣기</button><p class="dict-small">문맥 없는 기본 독음입니다. 다독음은 각 글자 옥편에서 확인하세요.</p></section>`;
   }
   function card(r) {
-    return `<article class="dict-result" data-detail="${esc(r.c)}">${content(r)}<button class="ghost" data-audio="${esc(r.c)}">▶</button></article>`;
+    return `<article class="dict-result" data-detail="${esc(r.c)}">${content(r)}<div class="hd-mount" data-hd-han="${esc(r.c)}"></div><button class="ghost" data-audio="${esc(r.c)}">▶</button></article>`;
   }
   function searchHangul(q) {
     const qn = q.trim();
@@ -227,6 +229,7 @@
     } else body = shown.map(card).join("");
     const kind = mode === "hangul" ? "한국 독음·훈음" : "글자를 눌러 옥편 열기";
     dictView.innerHTML = head + `<p>${matched.length}자 · ${kind}</p><div class="dict-tools"><input class="dict-results-filter" value="${esc(filter)}" placeholder="결과 필터: 한자·독음·훈"></div><div class="dict-grid">${body || "<p>결과가 없습니다.</p>"}</div>${!expanded && !filter && matched.length > 40 ? `<button class="more-btn" data-dictmore>더 보기 (나머지 ${matched.length - 40}개)</button>` : ""}`;
+    if (window.hanziDaily) window.hanziDaily.mountAll(dictView);
   }
   function detectMode(q) {
     if (han(q)) return "han";

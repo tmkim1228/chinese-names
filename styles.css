@@ -146,6 +146,15 @@ body { min-height: 100dvh; }
   width: min(480px, 100%); background: #fff; border-radius: 20px; padding: 1rem 1rem 1.1rem;
   box-shadow: 0 20px 50px rgba(0,0,0,.25);
 }
+#flash-modal .modal-card, #quiz-modal .modal-card {
+  max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;
+}
+#flash-modal .flash-card {
+  flex: 1 1 auto; min-height: 120px; overflow: auto;
+}
+#quiz-modal .quiz-body {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+}
 .modal-head { display: flex; justify-content: space-between; align-items: center; }
 .modal-head h2 { margin: 0; font-size: 1.1rem; }
 .icon-x { border: 0; background: var(--chip); width: 2.2rem; height: 2.2rem; border-radius: 999px; font-size: 1.3rem; cursor: pointer; }
@@ -518,4 +527,108 @@ button.doc-sum-item:hover, button.doc-sum-item:focus { background: #eef4ff; }
   .srs-kpis { grid-template-columns: repeat(2, 1fr); }
   .flash-actions { grid-template-columns: 1fr 1fr 1fr; }
   .flash-actions button { padding: .55rem .35rem; font-size: .78rem; }
+}
+
+/* v2.6 HANZI DAILY card */
+.hd-mount { margin-top: .75rem; }
+.hd-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #f7f9fc;
+  padding: .75rem .85rem .85rem;
+  text-align: left;
+}
+.hd-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.hd-source {
+  font-size: .68rem; font-weight: 800; letter-spacing: .06em;
+  color: #5a6b82; background: #e8eef6; border-radius: 999px;
+  padding: .12rem .5rem;
+}
+.hd-mini-han { font-family: var(--han); font-size: 1.35rem; font-weight: 800; margin-right: .35rem; }
+.hd-mini-py { color: var(--brand2); font-weight: 700; }
+.hd-meaning { margin: .4rem 0 .35rem; line-height: 1.45; }
+.hd-ko { font-weight: 800; }
+.hd-en { display: block; color: var(--muted); font-size: .82rem; font-weight: 600; margin-top: .15rem; }
+.hd-poly {
+  display: inline-block; margin-right: .35rem; font-size: .68rem; font-weight: 800;
+  color: #8a5a00; background: #fff1d6; border-radius: 999px; padding: .08rem .4rem;
+}
+.hd-examples { margin: .2rem 0 .55rem; padding-left: 1.1rem; }
+.hd-examples li { margin: .15rem 0; line-height: 1.4; }
+.hd-ex-han { font-family: var(--han); font-weight: 800; }
+.hd-ex-py { color: var(--brand2); font-size: .88rem; }
+.hd-ex-m { color: var(--muted); font-size: .85rem; }
+.hd-rows { margin: 0; display: grid; gap: .45rem; }
+.hd-row { display: grid; grid-template-columns: 2.6rem 1fr; gap: .45rem; align-items: start; margin: 0; }
+.hd-row dt {
+  margin: 0; font-size: .75rem; font-weight: 800; line-height: 1.5;
+  border-radius: 6px; text-align: center; padding: .08rem 0;
+}
+.hd-row dd { margin: 0; line-height: 1.5; font-size: .92rem; overflow-wrap: break-word; word-break: keep-all; min-width: 0; }
+.hd-row-parts dt { color: #0f5f5c; background: #d9f1f0; }
+.hd-row-bridge dt { color: #8a5a00; background: #fff1d6; }
+.hd-row-memory dt { color: #8a2f1a; background: #fde8e0; }
+.hd-yeonsang, .hd-story { margin: 0; }
+.hd-story-toggle { margin-top: .3rem; padding: .25rem .6rem; font-size: .72rem; }
+button.hd-part {
+  display: inline; border: 0; background: transparent; padding: 0 .05rem;
+  font: inherit; font-family: var(--han); font-weight: 800; color: var(--brand2);
+  cursor: pointer; text-decoration: underline; text-underline-offset: .15em;
+  border-radius: 4px;
+}
+button.hd-part:hover, button.hd-part:focus { background: #eef4ff; }
+.hd-card.is-compact { padding: .55rem .65rem; }
+.hd-card.is-compact .hd-examples { font-size: .85rem; }
+.hd-card.is-compact .hd-row dd { font-size: .85rem; }
+.hd-overlay {
+  position: fixed; inset: 0; z-index: 80; background: #10203988;
+  display: grid; place-items: center; padding: 1rem;
+}
+.hd-overlay[hidden] { display: none; }
+.hd-overlay-card {
+  max-width: 560px; width: 100%; max-height: 90vh; overflow: auto;
+  background: #fff; padding: 1.1rem 1.15rem; border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.25);
+}
+.hd-part-list { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.hd-part-item {
+  width: 100%; display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap;
+  border: 1px solid var(--border); background: #fff; border-radius: 12px;
+  padding: .55rem .7rem; cursor: pointer; text-align: left;
+}
+.hd-part-item:hover { border-color: var(--brand2); background: #eef4ff; }
+.hd-part-han { font-family: var(--han); font-size: 1.4rem; font-weight: 800; }
+.hd-part-meta { color: var(--muted); font-size: .88rem; }
+.flash-back .hd-mount, .quiz-body .hd-mount, .doc-panel-hd { margin-top: .55rem; }
+.flash-back .hd-card, .quiz-body .hd-card {
+  font-size: 1rem; font-weight: 500; text-align: left;
+}
+.flash-back .hd-ko, .quiz-body .hd-ko { font-weight: 800; }
+/* 복습 뒷면은 구성·연결·기억을 우선해 예단어는 한자 탭·옥편에서 본다. */
+.flash-back .hd-card .hd-examples,
+.quiz-body .hd-card .hd-examples { display: none; }
+.flash-back .hd-mini-han, .flash-back .hd-mini-py,
+.quiz-body .hd-mini-han, .quiz-body .hd-mini-py { display: none; }
+@media (max-width: 560px) {
+  .flash-front, .flash-back { font-size: 1.35rem; }
+  .flash-front .big, .flash-back .big { font-size: 2.05rem; margin: .15rem 0; }
+  #flash-modal .modal-card, #quiz-modal .modal-card { padding: .75rem .8rem .85rem; }
+  .flash-card { padding: .8rem; min-height: 140px; }
+}
+
+
+@media (max-width: 560px) {
+  .hd-row { grid-template-columns: 1fr; gap: .15rem; }
+  .hd-row dt { width: 2.6rem; }
+}
+
+.dict-overlay { align-items: start; overflow: auto; }
+.dict-overlay .dict-detail { max-height: 96vh; }
+@media (max-width: 560px) {
+  .dict-overlay { padding: .5rem; }
+  .dict-overlay .dict-detail { padding: .85rem .8rem .9rem; max-height: calc(100vh - 1rem); }
+  .dict-detail .dict-glyph { font-size: 3.2rem; }
+  .dict-detail .hd-mount { margin-top: .5rem; }
+  .dict-detail .hd-examples { margin-bottom: .35rem; }
+  .dict-detail .dict-tools { margin: .45rem 0; }
 }

@@ -694,6 +694,7 @@
       </section>
       <h3 class="doc-sub">글자별 훈음 · 독음</h3>
       <div class="doc-panel-chars">${charHtml}</div>
+      <div class="hd-mount doc-panel-hd" data-hd-text="${esc(surface)}" data-hd-compact="1"></div>
       <div class="dict-tools">
         <button class="primary" data-saveword data-save-review ${canSave ? "" : "disabled"}>${isWordSaved(tok) ? "✓ 복습에 추가" : "복습에 추가"}</button>
         <button class="ghost" data-audio="${esc(simp)}">▶ 중국어 듣기</button>
@@ -701,6 +702,7 @@
       <p id="doc-save-note">${isWordSaved(tok) ? "✓ 복습 목록에 저장됨" : ""}</p>`;
     overlay.hidden = false;
     overlay.dataset.tok = String(tokens.indexOf(tok));
+    if (window.hanziDaily) window.hanziDaily.mountAll(overlay);
   }
 
   async function analyze(opts) {
