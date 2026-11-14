@@ -45,7 +45,18 @@
   /** @type {{role:'sur'|'given', bare:string, tone:number|null, selected:object|null, compound?:object|null}[]} */
   let slots = [];
   let history = loadHistory();
-  let flash = { mode: "py2han", i: 0, revealed: false, deck: [] };
+  (function migrateOnLoad() {
+    const S = window.NameSrs;
+    if (!S) return;
+    const r = S.migrateHistory(history);
+    history = r.items;
+    if (r.changed) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)); } catch (_) {}
+    }
+  })();
+  let flash = { mode: "py2han", i: 0, revealed: false, deck: [], todayOnly: false };
+  let quiz = { mode: "mcq", i: 0, deck: [], results: [], current: null };
+  let srsChartDays = 14;
 
   function loadHistory() {
     try {
@@ -93,7 +104,11 @@
     updateBackupBanner();
   }
   async function exportHistory() {
-    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), items: history }, null, 2);
+    const S = window.NameSrs;
+    const payloadObj = S
+      ? S.buildExport(history, S.loadStats())
+      : { version: 1, exportedAt: new Date().toISOString(), items: history };
+    const payload = JSON.stringify(payloadObj, null, 2);
     const defaultName = `chinese-names-history-${new Date().toISOString().slice(0, 10)}.json`;
     if (window.electronAPI?.exportJson) {
       const res = await window.electronAPI.exportJson(defaultName, payload);
@@ -729,14 +744,58 @@
     const i = history.findIndex((h) => h.id === entry.id);
     if (i >= 0) {
       const prev = history[i];
-      history[i] = { ...entry, known: prev.known, date: entry.date };
+      const examples = Array.isArray(prev.examples) ? prev.examples.slice() : [];
+      if (Array.isArray(entry.examples)) {
+        for (const ex of entry.examples) {
+          if (ex && !examples.includes(ex)) examples.push(ex);
+        }
+      }
+      history[i] = {
+        ...entry,
+        known: prev.known,
+        date: entry.date,
+        box: prev.box,
+        due: prev.due,
+        lastReviewed: prev.lastReviewed,
+        examples,
+        meaningKo: entry.meaningKo || prev.meaningKo,
+        meaningEn: entry.meaningEn || prev.meaningEn,
+      };
     } else {
+      const S = window.NameSrs;
+      if (S && entry.box == null) {
+        entry.box = 1;
+        entry.due = S.todayStr();
+      }
       history.unshift(entry);
     }
     // cap
     if (history.length > 500) history = history.slice(0, 500);
     saveHistory();
     if (!els.viewReview.hidden) renderReviewList();
+  }
+
+  function isSavedId(id) {
+    return history.some((h) => h.id === id);
+  }
+  function toggleHistoryEntry(entry) {
+    if (!entry || !entry.id) return { saved: false };
+    const i = history.findIndex((h) => h.id === entry.id);
+    if (i >= 0) {
+      history.splice(i, 1);
+      saveHistory();
+      if (!els.viewReview.hidden) renderReviewList();
+      return { saved: false };
+    }
+    upsertHistory(entry);
+    return { saved: true };
+  }
+  function meaningOf(h) {
+    return String((h && h.meaningKo) || "").trim()
+      || String((h && h.hun) || "").trim()
+      || String((h && h.ko) || "").trim()
+      || (h && h.defs && h.defs[0])
+      || "";
   }
 
   function speak(text) {
@@ -801,7 +860,7 @@
       const tab = btn.dataset.tab;
       els.viewSearch.hidden = tab !== "search";
       els.viewReview.hidden = tab !== "review";
-      if (tab === "review") renderReviewList();
+      if (tab === "review") { renderReviewList(); renderSrsPanel(); }
     });
   });
 
@@ -868,16 +927,117 @@
     els.asmSave.addEventListener("click", () => confirmSaveToHistory());
   }
 
+  function boxLabel(h) {
+    const S = window.NameSrs;
+    const box = Number(h && h.box) || 1;
+    const iv = S ? S.intervalFor(box) : "";
+    return `${box}단계` + (iv ? `(${iv}일)` : "");
+  }
+  function dueLabel(h) {
+    const S = window.NameSrs;
+    const due = h && h.due;
+    if (!due) return "";
+    const today = S ? S.todayStr() : "";
+    const cls = !today ? "" : (S.cmpDate(due, today) < 0 ? "due-now" : S.cmpDate(due, today) === 0 ? "due-now" : "due-soon");
+    const word = today && S.cmpDate(due, today) <= 0 ? "오늘 복습" : `다음 복습 ${esc(due)}`;
+    return `<span class="${cls}">${word}</span>`;
+  }
+  function updateTodayLine() {
+    const S = window.NameSrs;
+    const n = S ? S.dueItems(history).length : history.filter((h) => h.known !== true).length;
+    const el = document.getElementById("review-due-count");
+    if (el) el.textContent = String(n);
+    const btn = document.getElementById("btn-review-today");
+    if (btn) btn.disabled = n === 0;
+  }
+  function renderSrsPanel() {
+    const S = window.NameSrs;
+    if (!S) return;
+    const stats = S.loadStats();
+    const tot = S.totals(history);
+    const st = S.streak(stats);
+    const setTxt = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = String(v); };
+    setTxt("srs-streak", st);
+    setTxt("srs-saved", tot.saved);
+    setTxt("srs-learned", tot.learned);
+    setTxt("srs-mastered", tot.mastered);
+    const goalEl = document.getElementById("srs-goal");
+    if (goalEl && document.activeElement !== goalEl) goalEl.value = String(stats.goal || 20);
+    renderSrsChart(stats);
+    renderSrsGrid();
+    updateTodayLine();
+  }
+  function renderSrsChart(stats) {
+    const S = window.NameSrs;
+    const host = document.getElementById("srs-chart");
+    if (!host || !S) return;
+    const series = S.chartSeries(stats, srsChartDays);
+    const goal = Math.max(1, Number(stats.goal) || 20);
+    const maxV = Math.max(goal, ...series.map((x) => x.count), 1);
+    const W = 640, H = 160, padL = 28, padR = 8, padT = 12, padB = 28;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const barW = innerW / series.length;
+    const gy = padT + innerH - (goal / maxV) * innerH;
+    const bars = series.map((x, i) => {
+      const h = (x.count / maxV) * innerH;
+      const x0 = padL + i * barW + barW * 0.18;
+      const y0 = padT + innerH - h;
+      const label = x.date.slice(5);
+      const show = i === 0 || i === series.length - 1 || (srsChartDays === 14 ? i % 2 === 0 : i % 5 === 0);
+      const lab = show ? `<text x="${x0 + barW * 0.32}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#5a6b82">${label}</text>` : "";
+      return `<rect x="${x0}" y="${y0}" width="${barW * 0.64}" height="${Math.max(h, x.count ? 2 : 0)}" rx="2" fill="#2f6fed"></rect>${lab}`;
+    }).join("");
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="최근 ${srsChartDays}일 복습 수, 하루 목표 ${goal}개">
+      <line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5 4"></line>
+      <text x="${W - padR}" y="${Math.max(12, gy - 4)}" text-anchor="end" font-size="10" fill="#c0392b">목표 ${goal}</text>
+      ${bars}
+    </svg>`;
+  }
+  function renderSrsGrid() {
+    const S = window.NameSrs;
+    const host = document.getElementById("srs-grid");
+    if (!host) return;
+    if (!history.length) { host.innerHTML = ""; return; }
+    host.innerHTML = history.map((h) => {
+      const lv = S ? S.levelOf(h) : "new";
+      const mark = S ? S.LEVEL_MARK[lv] : "";
+      const title = `${h.simp} · ${S ? S.LEVEL_LABEL[lv] : ""} · ${boxLabel(h)}`;
+      return `<button type="button" class="srs-cell lv-${lv}" data-srs-id="${esc(h.id)}" title="${esc(title)}" aria-label="${esc(title)}">
+        <span class="srs-cell-han">${esc((h.simp || h.han || "?").slice(0, 2))}</span>
+        <span class="srs-cell-mark">${esc(mark)}</span>
+      </button>`;
+    }).join("");
+  }
+  function showSrsDetail(id) {
+    const h = history.find((x) => x.id === id);
+    const box = document.getElementById("srs-detail-body");
+    const modal = document.getElementById("srs-detail-modal");
+    if (!h || !box || !modal) return;
+    const ex = (h.examples && h.examples.length) ? `<p>예문 · ${esc(h.examples.join(" · "))}</p>` : "";
+    const defs = (h.defs && h.defs.length) ? `<p>영어 뜻 · ${esc(h.defs.join(" · "))}</p>` : "";
+    const en = h.meaningEn ? `<p>영어 뜻 · ${esc(h.meaningEn)}</p>` : defs;
+    box.innerHTML = `<div class="big">${esc(h.simp)}</div>
+      <p>${esc(h.py)}</p>
+      <p>${esc(h.ko || "")} · ${esc(h.hun || "")}</p>
+      ${h.meaningKo ? `<p>한국어 뜻 · ${esc(h.meaningKo)}</p>` : ""}
+      ${en}
+      <p>${dueLabel(h)} · ${esc(boxLabel(h))}</p>
+      ${ex}`;
+    modal.hidden = false;
+  }
+
   // Review list
   function renderReviewList() {
     const q = (els.reviewSearch.value || "").trim().toLowerCase();
     let items = history;
     if (q) {
       items = history.filter((h) =>
-        [h.simp, h.trad, h.py, h.ko, h.hun, h.query, ...(h.defs || [])].join(" ").toLowerCase().includes(q)
+        [h.simp, h.trad, h.py, h.ko, h.hun, h.query, h.meaningKo, h.meaningEn, ...(h.defs || []), ...(h.examples || [])].join(" ").toLowerCase().includes(q)
       );
     }
     els.histCount.textContent = String(history.length);
+    updateTodayLine();
+    if (!els.viewReview.hidden) renderSrsPanel();
     if (!items.length) {
       els.reviewList.innerHTML = "";
       els.reviewEmpty.hidden = false;
@@ -892,16 +1052,18 @@
       const dateStr = isNaN(d) ? h.date : d.toLocaleString("ko-KR", { timeZone: "Asia/Singapore" });
       const know = h.known === true ? '<span class="known-tag">알았음</span>'
         : h.known === false ? '<span class="unknown-tag">모름</span>' : "";
-      const kind = h.kind || ([...h.simp].length === 1 ? "char" : "name");
+      const kind = h.kind || ([...(h.simp || "")].length === 1 ? "char" : "name");
       const kindLabel = kind === "word" ? '<span class="kind-tag">단어</span> ' : kind === "char" ? '<span class="kind-tag">글자</span> ' : '<span class="kind-tag">이름</span> ';
       const defs = (h.defs && h.defs.length) ? `<div class="hist-defs">영어 뜻 · ${esc(h.defs.join(" · "))}</div>` : "";
+      const ex = (h.examples && h.examples.length) ? `<div class="hist-defs">예문 · ${esc(h.examples[0])}</div>` : "";
       return `<article class="hist-card" data-kind="${kind}" data-id="${esc(h.id)}">
         <div>
-          <div class="hist-simp">${kindLabel}${esc(h.simp)}${h.trad ? ` <span style="font-size:.95rem;color:var(--muted)">/ ${esc(h.trad)}</span>` : ""}</div>
+          <div class="hist-simp">${kindLabel}${esc(h.simp || "")}${h.trad ? ` <span style="font-size:.95rem;color:var(--muted)">/ ${esc(h.trad)}</span>` : ""}</div>
           <div class="hist-meta">${esc(h.py)} · ${esc(dateStr)} ${know}</div>
+          <div class="hist-srs">${dueLabel(h)} · ${esc(boxLabel(h))}</div>
           <div class="hist-ko">${esc(h.ko)}</div>
           <div class="hist-hun">${esc(h.hun)}</div>
-          ${defs}
+          ${defs}${ex}
         </div>
         <div class="hist-actions">
           <button type="button" class="ghost hist-speak" data-speak="${esc(h.simp)}">▶</button>
@@ -926,7 +1088,14 @@
     const know = e.target.closest(".hist-know");
     if (know) {
       const h = history.find((x) => x.id === know.dataset.id);
-      if (h) { h.known = true; saveHistory(); renderReviewList(); }
+      if (h) {
+        if (window.NameSrs) {
+          window.NameSrs.applyKnown(h);
+          window.NameSrs.recordReview(window.NameSrs.loadStats());
+        } else h.known = true;
+        saveHistory();
+        renderReviewList();
+      }
     }
   });
 
@@ -947,14 +1116,29 @@
         query: it.query || "",
         kind: it.kind || "",
         defs: it.defs || [],
+        box: it.box,
+        due: it.due,
+        examples: Array.isArray(it.examples) ? it.examples.slice() : [],
+        meaningKo: it.meaningKo || "",
+        meaningEn: it.meaningEn || "",
+        lastReviewed: it.lastReviewed || "",
       };
       const idx = history.findIndex((h) => h.id === entry.id);
-      if (idx >= 0) history[idx] = { ...history[idx], ...entry };
-      else { history.unshift(entry); added++; }
+      if (idx >= 0) {
+        const prev = history[idx];
+        const examples = Array.isArray(prev.examples) ? prev.examples.slice() : [];
+        for (const ex of entry.examples) if (ex && !examples.includes(ex)) examples.push(ex);
+        history[idx] = { ...prev, ...entry, examples };
+      } else { history.unshift(entry); added++; }
     }
+    if (window.NameSrs) window.NameSrs.migrateHistory(history);
     saveHistory();
     renderReviewList();
     return added;
+  }
+  function mergeImportedStats(incoming) {
+    if (!incoming || !window.NameSrs) return;
+    window.NameSrs.saveStats(window.NameSrs.mergeStats(window.NameSrs.loadStats(), incoming));
   }
 
   // Export / Import (Electron native dialogs when available)
@@ -972,10 +1156,11 @@
       if (!res) return;
       if (!res.ok) { alert(res.error || "JSON을 읽지 못했습니다."); return; }
       try {
-        const data = JSON.parse(res.text);
-        const items = Array.isArray(data) ? data : data.items;
+        const parsed = window.NameSrs.parseImport(res.text);
+        const items = parsed.items;
         if (!Array.isArray(items)) throw new Error("invalid");
         const added = mergeImportedItems(items);
+        mergeImportedStats(parsed.stats);
         alert(`가져오기 완료 (신규 ${added}개, 전체 ${history.length}개)`);
       } catch {
         alert("JSON을 읽지 못했습니다.");
@@ -989,10 +1174,11 @@
     if (!file) return;
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
-      const items = Array.isArray(data) ? data : data.items;
+      const parsed = window.NameSrs.parseImport(text);
+      const items = parsed.items;
       if (!Array.isArray(items)) throw new Error("invalid");
       const added = mergeImportedItems(items);
+      mergeImportedStats(parsed.stats);
       alert(`가져오기 완료 (신규 ${added}개, 전체 ${history.length}개)`);
     } catch {
       alert("JSON을 읽지 못했습니다.");
@@ -1001,49 +1187,85 @@
   });
 
   // Flashcards
-  function openFlash() {
-    if (!history.length) { alert("복습할 이름이 없습니다."); return; }
-    flash.deck = [...history];
-    // prefer unknown first
-    flash.deck.sort((a, b) => Number(a.known === true) - Number(b.known === true));
+  function sortDueFirst(list) {
+    const S = window.NameSrs;
+    const today = S ? S.todayStr() : "";
+    return [...list].sort((a, b) => {
+      const ad = S && S.isDue(a, today) ? 0 : 1;
+      const bd = S && S.isDue(b, today) ? 0 : 1;
+      if (ad !== bd) return ad - bd;
+      return String(a.due || "").localeCompare(String(b.due || ""));
+    });
+  }
+  function openFlash(todayOnly) {
+    const S = window.NameSrs;
+    let source = todayOnly && S ? S.dueItems(history) : history;
+    if (!source.length) {
+      alert(todayOnly ? "오늘 복습할 카드가 없습니다." : "복습할 이름이 없습니다.");
+      return;
+    }
+    flash.todayOnly = !!todayOnly;
+    flash.deck = sortDueFirst(source);
     flash.i = 0;
     flash.revealed = false;
+    const title = document.querySelector("#flash-modal h2");
+    if (title) title.textContent = todayOnly ? "오늘 복습" : "플래시카드 복습";
     els.flashModal.hidden = false;
     renderFlash();
   }
+  function exampleLine(h) {
+    if (h && h.examples && h.examples.length) {
+      return `<div class="flash-example">예문 · ${esc(h.examples[0])}</div>`;
+    }
+    return "";
+  }
   function renderFlash() {
+    const actions = document.querySelector("#flash-modal .flash-actions");
+    const speakBtn = document.getElementById("flash-speak");
+    const tap = document.querySelector("#flash-modal .flash-tap");
     if (!flash.deck.length) {
       els.flashFront.innerHTML = "끝! 모든 카드를 봤습니다.";
       els.flashBack.hidden = true;
       els.flashProgress.textContent = "";
+      if (tap) tap.hidden = true;
+      if (actions) actions.hidden = true;
+      if (speakBtn) speakBtn.hidden = true;
       return;
     }
-    if (flash.i >= flash.deck.length) flash.i = 0;
+    if (actions) actions.hidden = false;
+    if (speakBtn) speakBtn.hidden = false;
+    if (flash.i >= flash.deck.length) flash.i = flash.deck.length - 1;
     const h = flash.deck[flash.i];
-    els.flashProgress.textContent = `${flash.i + 1} / ${flash.deck.length}` + (h.known === true ? " · 알았음" : h.known === false ? " · 모름" : "");
+    const box = h.box ? ` · ${boxLabel(h)}` : "";
+    els.flashProgress.textContent = `${flash.i + 1} / ${flash.deck.length}` + box + (h.known === true ? " · 알았음" : h.known === false ? " · 모름" : "");
     els.flashBack.hidden = !flash.revealed;
-    document.querySelector(".flash-tap").hidden = flash.revealed;
-    const defLine = (h.defs && h.defs.length) ? `<div style="font-size:.9rem;margin-top:.4rem">영어 뜻 · ${esc(h.defs.join(" · "))}</div>` : "";
+    if (tap) tap.hidden = flash.revealed;
+    const defLine = (h.defs && h.defs.length) ? `<div style="font-size:.9rem;margin-top:.4rem">영어 뜻 · ${esc(h.defs.join(" · "))}</div>` : (h.meaningEn ? `<div style="font-size:.9rem;margin-top:.4rem">영어 뜻 · ${esc(h.meaningEn)}</div>` : "");
+    const koLine = h.meaningKo ? `<div>${esc(h.meaningKo)}</div>` : "";
+    const ex = exampleLine(h);
     if (flash.mode === "py2han") {
       els.flashFront.innerHTML = `<div>${esc(h.py)}</div>`;
-      els.flashBack.innerHTML = `<span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div><div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}`;
+      els.flashBack.innerHTML = `<span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div>${koLine}<div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}${ex}`;
     } else if (flash.mode === "han2py") {
       els.flashFront.innerHTML = `<span class="big">${esc(h.simp)}</span>`;
-      els.flashBack.innerHTML = `<div>${esc(h.py)}</div><div>${esc(h.ko)}</div><div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}`;
+      els.flashBack.innerHTML = `<div>${esc(h.py)}</div><div>${esc(h.ko)}</div>${koLine}<div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}${ex}`;
     } else {
       els.flashFront.innerHTML = `<div>${esc(h.py)}</div>`;
-      els.flashBack.innerHTML = `<div style="font-size:1.2rem">${esc(h.hun)}</div><span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div>${defLine}`;
+      els.flashBack.innerHTML = `<div style="font-size:1.2rem">${esc(h.hun)}</div>${koLine}<span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div>${defLine}${ex}`;
     }
   }
-  document.getElementById("btn-flash").addEventListener("click", openFlash);
-  document.getElementById("flash-close").addEventListener("click", () => { els.flashModal.hidden = true; });
+  document.getElementById("btn-flash").addEventListener("click", () => openFlash(false));
+  const btnToday = document.getElementById("btn-review-today");
+  if (btnToday) btnToday.addEventListener("click", () => openFlash(true));
+  document.getElementById("flash-close").addEventListener("click", () => { els.flashModal.hidden = true; renderReviewList(); });
   els.flashCard.addEventListener("click", () => {
+    if (!flash.deck.length) return;
     flash.revealed = !flash.revealed;
     renderFlash();
   });
-  document.querySelectorAll(".flash-mode .chip").forEach((btn) => {
+  document.querySelectorAll("#flash-modal .flash-mode .chip").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".flash-mode .chip").forEach((b) => b.classList.toggle("active", b === btn));
+      document.querySelectorAll("#flash-modal .flash-mode .chip").forEach((b) => b.classList.toggle("active", b === btn));
       flash.mode = btn.dataset.mode;
       flash.revealed = false;
       renderFlash();
@@ -1053,30 +1275,294 @@
     const h = flash.deck[flash.i];
     if (h) speak(h.simp);
   });
-  function markFlash(known) {
+  function gradeFlash(result) {
+    const S = window.NameSrs;
     const h = flash.deck[flash.i];
     if (!h) return;
-    const item = history.find((x) => x.id === h.id);
-    if (item) item.known = known;
-    h.known = known;
+    const item = history.find((x) => x.id === h.id) || h;
+    if (S) {
+      if (result === "known") S.applyKnown(item);
+      else if (result === "unsure") S.applyUnsure(item);
+      else S.applyUnknown(item);
+      S.recordReview(S.loadStats());
+    } else {
+      item.known = result === "known";
+    }
+    h.known = item.known;
+    h.box = item.box;
+    h.due = item.due;
     saveHistory();
-    flash.i = (flash.i + 1) % flash.deck.length;
+    if (result === "unknown") {
+      const [card] = flash.deck.splice(flash.i, 1);
+      flash.deck.push(card);
+    } else {
+      flash.deck.splice(flash.i, 1);
+    }
     flash.revealed = false;
     renderFlash();
     renderReviewList();
   }
-  document.getElementById("flash-known").addEventListener("click", () => markFlash(true));
-  document.getElementById("flash-unknown").addEventListener("click", () => markFlash(false));
+  document.getElementById("flash-known").addEventListener("click", () => gradeFlash("known"));
+  document.getElementById("flash-unknown").addEventListener("click", () => gradeFlash("unknown"));
+  const flashUnsure = document.getElementById("flash-unsure");
+  if (flashUnsure) flashUnsure.addEventListener("click", () => gradeFlash("unsure"));
+
+  // Quiz
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  function uniqueValues(vals, except) {
+    const seen = new Set();
+    const out = [];
+    for (const v of vals) {
+      const s = String(v || "").trim();
+      if (!s || s === except || seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  }
+  function quizDistractors(correct, kind, n) {
+    const target = kind === "py" ? correct.py : meaningOf(correct);
+    const pool = [];
+    for (const h of history) {
+      if (h.id === correct.id) continue;
+      pool.push(kind === "py" ? h.py : meaningOf(h));
+    }
+    if (window.dictionaryApp && typeof window.dictionaryApp.sampleEntries === "function") {
+      for (const r of window.dictionaryApp.sampleEntries(24, correct.simp)) {
+        if (kind === "py") pool.push((r.p && r.p[0]) || "");
+        else pool.push((r.h && r.h.join(" / ")) || (r.e && r.e[0]) || "");
+      }
+    }
+    const uniq = uniqueValues(pool, String(target || "").trim());
+    return shuffle(uniq).slice(0, n);
+  }
+  function quizSource(todayOnly) {
+    const S = window.NameSrs;
+    if (todayOnly && S) {
+      const due = S.dueItems(history);
+      if (due.length) return due;
+    }
+    return history;
+  }
+  function openQuiz(opts) {
+    const todayOnly = !opts || opts.todayOnly !== false;
+    const retryItems = opts && opts.items;
+    const source = retryItems || quizSource(todayOnly);
+    if (!source.length) { alert("퀴즈를 풀 카드가 없습니다."); return; }
+    quiz.mode = (opts && opts.mode) || quiz.mode || "mcq";
+    quiz.deck = shuffle(source);
+    quiz.i = 0;
+    quiz.results = [];
+    quiz.current = null;
+    document.querySelectorAll("#quiz-modal .quiz-mode .chip").forEach((b) => b.classList.toggle("active", b.dataset.qmode === quiz.mode));
+    document.getElementById("quiz-modal").hidden = false;
+    document.getElementById("quiz-body").hidden = false;
+    document.getElementById("quiz-summary").hidden = true;
+    renderQuiz();
+  }
+  function buildQuizQuestion(h) {
+    if (quiz.mode === "pinyin") {
+      return { item: h, kind: "py-input" };
+    }
+    const hasKo = !!meaningOf(h);
+    const kind = hasKo ? "ko" : "py";
+    const answer = kind === "py" ? h.py : meaningOf(h);
+    const choices = shuffle([answer, ...quizDistractors(h, kind, 3)]).slice(0, 4);
+    if (!choices.includes(answer)) choices[0] = answer;
+    return { item: h, kind, answer, choices };
+  }
+  function renderQuiz() {
+    const body = document.getElementById("quiz-body");
+    const summary = document.getElementById("quiz-summary");
+    if (quiz.i >= quiz.deck.length) {
+      body.hidden = true;
+      summary.hidden = false;
+      const ok = quiz.results.filter((r) => r.ok).length;
+      const partial = quiz.results.filter((r) => !r.ok && r.partial).length;
+      const bad = quiz.results.length - ok - partial;
+      document.getElementById("quiz-score").textContent =
+        `정답 ${ok} · 성조만 틀린 답 ${partial} · 오답 ${bad} (총 ${quiz.results.length}문항)`;
+      const retry = document.getElementById("quiz-retry-wrong");
+      const wrong = quiz.results.filter((r) => !r.ok).map((r) => r.item);
+      retry.hidden = !wrong.length;
+      retry.dataset.count = String(wrong.length);
+      return;
+    }
+    body.hidden = false;
+    summary.hidden = true;
+    const h = quiz.deck[quiz.i];
+    quiz.current = buildQuizQuestion(h);
+    document.getElementById("quiz-progress").textContent = `${quiz.i + 1} / ${quiz.deck.length}`;
+    document.getElementById("quiz-prompt").innerHTML = `<span class="big">${esc(h.simp)}</span>`;
+    const feedback = document.getElementById("quiz-feedback");
+    feedback.hidden = true;
+    feedback.textContent = "";
+    const ex = document.getElementById("quiz-example");
+    ex.hidden = true;
+    document.getElementById("quiz-next").hidden = true;
+    const choicesEl = document.getElementById("quiz-choices");
+    const form = document.getElementById("quiz-pinyin-form");
+    if (quiz.mode === "pinyin") {
+      choicesEl.hidden = true;
+      choicesEl.innerHTML = "";
+      form.hidden = false;
+      const inp = document.getElementById("quiz-pinyin-input");
+      inp.value = "";
+      inp.disabled = false;
+      document.getElementById("quiz-pinyin-submit").disabled = false;
+      setTimeout(() => inp.focus(), 50);
+    } else {
+      form.hidden = true;
+      choicesEl.hidden = false;
+      choicesEl.innerHTML = quiz.current.choices.map((c, idx) =>
+        `<button type="button" class="quiz-choice" data-idx="${idx}">${esc(c)}</button>`
+      ).join("");
+    }
+  }
+  function applyQuizResult(ok, partial) {
+    const S = window.NameSrs;
+    const h = quiz.current.item;
+    const item = history.find((x) => x.id === h.id) || h;
+    if (S) {
+      if (ok) S.applyKnown(item);
+      else if (partial) S.applyUnsure(item);
+      else S.applyUnknown(item);
+      S.recordReview(S.loadStats());
+    } else item.known = !!ok;
+    saveHistory();
+    quiz.results.push({ item, ok, partial: !!partial });
+    const ex = document.getElementById("quiz-example");
+    if (item.examples && item.examples.length) {
+      ex.hidden = false;
+      ex.textContent = "예문 · " + item.examples[0];
+    }
+    document.getElementById("quiz-next").hidden = false;
+    renderReviewList();
+  }
+  function gradeQuizChoice(idx) {
+    if (!quiz.current || quiz.current.locked) return;
+    quiz.current.locked = true;
+    const answer = quiz.current.answer;
+    const btns = document.querySelectorAll("#quiz-choices .quiz-choice");
+    btns.forEach((b) => {
+      const val = quiz.current.choices[Number(b.dataset.idx)];
+      if (val === answer) b.classList.add("is-correct");
+      if (Number(b.dataset.idx) === idx && val !== answer) b.classList.add("is-wrong");
+      b.disabled = true;
+    });
+    const ok = quiz.current.choices[idx] === answer;
+    const fb = document.getElementById("quiz-feedback");
+    fb.hidden = false;
+    fb.className = "quiz-feedback " + (ok ? "is-ok" : "is-bad");
+    fb.textContent = ok ? "정답입니다." : `정답은 ${answer} 입니다.`;
+    applyQuizResult(ok, false);
+  }
+  function gradeQuizPinyin() {
+    if (!quiz.current || quiz.current.locked) return;
+    const S = window.NameSrs;
+    const inp = document.getElementById("quiz-pinyin-input");
+    const got = inp.value;
+    const expected = quiz.current.item.py;
+    const res = S ? S.gradePinyin(got, expected) : { ok: got.trim() === expected, partial: false, message: "" };
+    quiz.current.locked = true;
+    inp.disabled = true;
+    document.getElementById("quiz-pinyin-submit").disabled = true;
+    const fb = document.getElementById("quiz-feedback");
+    fb.hidden = false;
+    fb.className = "quiz-feedback " + (res.ok ? "is-ok" : res.partial ? "is-partial" : "is-bad");
+    fb.textContent = res.message + (res.ok ? "" : ` 정답: ${expected}`);
+    applyQuizResult(res.ok, res.partial);
+  }
+
+  document.getElementById("btn-quiz")?.addEventListener("click", () => openQuiz({ todayOnly: true }));
+  document.getElementById("quiz-close")?.addEventListener("click", () => { document.getElementById("quiz-modal").hidden = true; renderReviewList(); });
+  document.getElementById("quiz-close-done")?.addEventListener("click", () => { document.getElementById("quiz-modal").hidden = true; renderReviewList(); });
+  document.getElementById("quiz-next")?.addEventListener("click", () => { quiz.i += 1; renderQuiz(); });
+  document.getElementById("quiz-choices")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".quiz-choice");
+    if (!btn) return;
+    gradeQuizChoice(Number(btn.dataset.idx));
+  });
+  document.getElementById("quiz-pinyin-form")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    gradeQuizPinyin();
+  });
+  document.querySelectorAll("#quiz-modal .quiz-mode .chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      quiz.mode = btn.dataset.qmode;
+      document.querySelectorAll("#quiz-modal .quiz-mode .chip").forEach((b) => b.classList.toggle("active", b === btn));
+      if (quiz.deck.length && quiz.i < quiz.deck.length && !(quiz.current && quiz.current.locked)) {
+        quiz.current = buildQuizQuestion(quiz.deck[quiz.i]);
+        const fb = document.getElementById("quiz-feedback");
+        if (fb) fb.hidden = true;
+        document.getElementById("quiz-next").hidden = true;
+        renderQuiz();
+        quiz.i = quiz.i; // keep position, rebuild current already done in renderQuiz
+      }
+    });
+  });
+  document.getElementById("quiz-retry-wrong")?.addEventListener("click", () => {
+    const items = quiz.results.filter((r) => !r.ok).map((r) => r.item);
+    if (!items.length) return;
+    openQuiz({ items, mode: quiz.mode, todayOnly: false });
+  });
+
+  document.getElementById("srs-range-14")?.addEventListener("click", () => {
+    srsChartDays = 14;
+    document.getElementById("srs-range-14").classList.add("active");
+    document.getElementById("srs-range-30").classList.remove("active");
+    renderSrsPanel();
+  });
+  document.getElementById("srs-range-30")?.addEventListener("click", () => {
+    srsChartDays = 30;
+    document.getElementById("srs-range-30").classList.add("active");
+    document.getElementById("srs-range-14").classList.remove("active");
+    renderSrsPanel();
+  });
+  document.getElementById("srs-goal")?.addEventListener("change", () => {
+    const S = window.NameSrs;
+    if (!S) return;
+    const stats = S.loadStats();
+    stats.goal = Math.max(1, Math.min(200, Number(document.getElementById("srs-goal").value) || 20));
+    S.saveStats(stats);
+    renderSrsPanel();
+  });
+  document.getElementById("srs-grid")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-srs-id]");
+    if (btn) showSrsDetail(btn.dataset.srsId);
+  });
+  document.getElementById("srs-detail-close")?.addEventListener("click", () => {
+    document.getElementById("srs-detail-modal").hidden = true;
+  });
+  document.getElementById("srs-detail-modal")?.addEventListener("click", (e) => {
+    if (e.target.id === "srs-detail-modal") e.currentTarget.hidden = true;
+  });
 
   window.nameAppBridge = {
     search: (q) => { els.input.value=q; runParse(); },
     searchKorean: (q) => { els.input.value=q; runParse(); },
     save: (entry) => { upsertHistory(entry); },
+    toggleSave: (entry) => toggleHistoryEntry(entry),
+    isSavedId,
     getHistory: () => history,
+    setHistory: (items) => { history = Array.isArray(items) ? items : history; },
+    saveHistory,
     exportHistory,
     ready: () => !!DATA,
     speak,
     parseKoreanName: (q) => { ensureKoIndex(); return parseKoreanName(q); },
+    openFlash,
+    openQuiz,
+    gradeFlash,
+    renderReviewList,
+    renderSrsPanel,
   };
 
   (function setupInstall() {
@@ -1104,6 +1590,7 @@
 
   // Init
   els.histCount.textContent = String(history.length);
+  updateTodayLine();
   updateBackupBanner();
   if (window.speechSynthesis) {
     window.speechSynthesis.getVoices();

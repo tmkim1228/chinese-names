@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#1b3a5a" />
-  <title>중국 이름 배우기 v2.4</title>
+  <title>중국 이름 배우기 v2.5</title>
   <link rel="stylesheet" href="styles.css" />
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="이름옥편"><meta name="mobile-web-app-capable" content="yes"></head>
 <body>
@@ -12,7 +12,7 @@
     <div class="brand">
       <span class="logo">名</span>
       <div>
-        <h1>중국 이름 배우기 <small>v2.4</small></h1>
+        <h1>중국 이름 배우기 <small>v2.5</small></h1>
         <p class="sub">중국 한자·이름·문서 옥편 · 오프라인 사전</p>
       </div>
     </div>
@@ -58,7 +58,7 @@
         <li><strong>이름</strong> — 병음(wang xiaoming)이나 한글 독음(왕소명)으로 중국 이름을 찾고 조립합니다.</li>
         <li><strong>한자 · 병음 · 한글</strong> — 글자·병음·한국 독음/훈음으로 옥편을 찾습니다.</li>
         <li><strong>문서</strong> — 회사 문서 등 중국어 글을 붙여 넣어 단어 병음·독음·한국어 뜻(앱 작성)을 봅니다. 없는 단어는 영어 뜻과 글자 훈음으로 보완합니다. 단어 사전은 이 탭을 처음 열 때 내려받습니다. 「AI에게 묻기」는 저장한 API 키로 앱 안에서 바로 번역·문맥 설명을 보여 줍니다. 키는 이 기기에만 저장되며, 질문할 때 문서 내용이 선택한 AI 회사로 전송되고 사용량만큼 요금이 부과됩니다.</li>
-        <li><strong>복습</strong> — 저장한 이름·글자·단어를 다시 보고 플래시카드로 익힙니다. 목록은 이 브라우저에만 남으니 JSON으로 백업하세요.</li>
+        <li><strong>복습</strong> — 저장한 이름·글자·단어를 다시 보고, 날짜가 돌아온 카드부터 플래시카드·퀴즈로 익힙니다. 학습 현황에서 하루 목표와 진도를 볼 수 있어요. 목록은 이 브라우저에만 남으니 JSON으로 백업하세요.</li>
       </ul>
       <p class="hint">휴대폰이나 컴퓨터에 설치하면 홈 화면에서 앱처럼 열 수 있습니다.</p>
     </section>
@@ -142,6 +142,38 @@
   </main>
 
   <main id="view-review" class="view" hidden>
+    <section id="srs-stats" class="panel srs-stats">
+      <details id="srs-stats-details" open>
+        <summary>학습 현황</summary>
+        <div class="srs-stats-body">
+          <div class="srs-kpis">
+            <div class="srs-kpi"><span class="srs-kpi-n" id="srs-streak">0</span><span class="srs-kpi-l">연속 학습 일수</span></div>
+            <div class="srs-kpi"><span class="srs-kpi-n" id="srs-saved">0</span><span class="srs-kpi-l">저장한 항목</span></div>
+            <div class="srs-kpi"><span class="srs-kpi-n" id="srs-learned">0</span><span class="srs-kpi-l">익힘 (3단계↑)</span></div>
+            <div class="srs-kpi"><span class="srs-kpi-n" id="srs-mastered">0</span><span class="srs-kpi-l">숙달 (5단계↑)</span></div>
+          </div>
+          <div class="srs-chart-head">
+            <div class="srs-range" role="group" aria-label="기간">
+              <button type="button" class="chip active" id="srs-range-14" data-range="14">14일</button>
+              <button type="button" class="chip" id="srs-range-30" data-range="30">30일</button>
+            </div>
+            <label class="srs-goal-label">하루 목표
+              <input id="srs-goal" type="number" min="1" max="200" value="20" />
+            </label>
+          </div>
+          <div id="srs-chart" class="srs-chart" aria-label="날짜별 복습 수"></div>
+          <p class="hint srs-legend">글자 표 색과 표시: <span class="srs-swatch lv-new">신 새로</span> <span class="srs-swatch lv-learning">학 학습</span> <span class="srs-swatch lv-learned">익 익힘</span> <span class="srs-swatch lv-mastered">완 숙달</span></p>
+          <div id="srs-grid" class="srs-grid" aria-label="저장한 항목 진도"></div>
+        </div>
+      </details>
+    </section>
+    <section id="review-today" class="panel review-today">
+      <p id="review-due-line" class="review-due-line">오늘 복습할 카드 <strong id="review-due-count">0</strong>개</p>
+      <div class="toolbar-actions">
+        <button type="button" id="btn-review-today" class="primary">오늘 복습 시작</button>
+        <button type="button" id="btn-quiz" class="ghost">퀴즈</button>
+      </div>
+    </section>
     <section id="backup-banner" class="panel backup-banner" hidden>
       <p>복습 목록은 이 브라우저에만 저장됩니다. JSON 파일로 내보내 백업해 두세요.</p>
       <div class="toolbar-actions">
@@ -152,7 +184,7 @@
     <section class="panel review-toolbar">
       <input id="review-search" type="search" placeholder="한자·병음·한글 검색" />
       <div class="toolbar-actions">
-        <button type="button" id="btn-flash" class="primary">플래시카드</button>
+        <button type="button" id="btn-flash" class="ghost">모든 카드</button>
         <button type="button" id="btn-export" class="ghost">내보내기</button>
         <button type="button" id="btn-import" class="ghost">가져오기</button>
         <input id="import-file" type="file" accept="application/json,.json" hidden />
@@ -223,9 +255,53 @@
       </button>
       <div class="flash-actions">
         <button type="button" id="flash-unknown" class="danger">모름</button>
-        <button type="button" id="flash-speak" class="ghost">▶ 듣기</button>
+        <button type="button" id="flash-unsure" class="ghost">애매함</button>
         <button type="button" id="flash-known" class="ok">알았음</button>
       </div>
+      <button type="button" id="flash-speak" class="ghost flash-speak">▶ 듣기</button>
+    </div>
+  </div>
+
+  <div id="quiz-modal" class="modal" hidden>
+    <div class="modal-card quiz-card">
+      <header class="modal-head">
+        <h2 id="quiz-title">퀴즈</h2>
+        <button type="button" id="quiz-close" class="icon-x" aria-label="닫기">×</button>
+      </header>
+      <div class="flash-mode quiz-mode">
+        <button type="button" class="chip active" data-qmode="mcq">4지선다</button>
+        <button type="button" class="chip" data-qmode="pinyin">병음 쓰기</button>
+      </div>
+      <div id="quiz-progress" class="flash-progress"></div>
+      <div id="quiz-body" class="quiz-body">
+        <div id="quiz-prompt" class="quiz-prompt"></div>
+        <div id="quiz-choices" class="quiz-choices" hidden></div>
+        <form id="quiz-pinyin-form" class="quiz-pinyin-form" hidden>
+          <label class="lbl" for="quiz-pinyin-input">병음</label>
+          <input id="quiz-pinyin-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="병음 (성조 기호·숫자, 또는 성조 없이)" />
+          <button type="submit" id="quiz-pinyin-submit" class="primary">확인</button>
+        </form>
+        <p id="quiz-feedback" class="quiz-feedback" hidden></p>
+        <p id="quiz-example" class="quiz-example" hidden></p>
+        <button type="button" id="quiz-next" class="primary" hidden>다음</button>
+      </div>
+      <div id="quiz-summary" class="quiz-summary" hidden>
+        <p id="quiz-score" class="quiz-score"></p>
+        <div class="toolbar-actions">
+          <button type="button" id="quiz-retry-wrong" class="primary">틀린 문제 다시 풀기</button>
+          <button type="button" id="quiz-close-done" class="ghost">닫기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="srs-detail-modal" class="modal" hidden>
+    <div class="modal-card">
+      <header class="modal-head">
+        <h2>항목 보기</h2>
+        <button type="button" id="srs-detail-close" class="icon-x" aria-label="닫기">×</button>
+      </header>
+      <div id="srs-detail-body"></div>
     </div>
   </div>
 
@@ -235,6 +311,6 @@
       <div id="credits"></div>
     </details>
   </footer>
-  <script src="app.js"></script><script src="dictionary.js"></script><script src="document.js"></script>
+  <script src="srs.js"></script><script src="app.js"></script><script src="dictionary.js"></script><script src="document.js"></script>
 <script src="pwa.js"></script></body>
 </html>
