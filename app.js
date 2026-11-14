@@ -1243,16 +1243,18 @@
     const defLine = (h.defs && h.defs.length) ? `<div style="font-size:.9rem;margin-top:.4rem">영어 뜻 · ${esc(h.defs.join(" · "))}</div>` : (h.meaningEn ? `<div style="font-size:.9rem;margin-top:.4rem">영어 뜻 · ${esc(h.meaningEn)}</div>` : "");
     const koLine = h.meaningKo ? `<div>${esc(h.meaningKo)}</div>` : "";
     const ex = exampleLine(h);
+    const hd = `<div class="hd-mount" data-hd-text="${esc(h.simp || "")}" data-hd-compact="1"></div>`;
     if (flash.mode === "py2han") {
       els.flashFront.innerHTML = `<div>${esc(h.py)}</div>`;
-      els.flashBack.innerHTML = `<span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div>${koLine}<div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}${ex}`;
+      els.flashBack.innerHTML = `<span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div>${koLine}<div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}${ex}${flash.revealed ? hd : ""}`;
     } else if (flash.mode === "han2py") {
       els.flashFront.innerHTML = `<span class="big">${esc(h.simp)}</span>`;
-      els.flashBack.innerHTML = `<div>${esc(h.py)}</div><div>${esc(h.ko)}</div>${koLine}<div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}${ex}`;
+      els.flashBack.innerHTML = `<div>${esc(h.py)}</div><div>${esc(h.ko)}</div>${koLine}<div style="font-size:.95rem;margin-top:.4rem">${esc(h.hun)}</div>${defLine}${ex}${flash.revealed ? hd : ""}`;
     } else {
       els.flashFront.innerHTML = `<div>${esc(h.py)}</div>`;
-      els.flashBack.innerHTML = `<div style="font-size:1.2rem">${esc(h.hun)}</div>${koLine}<span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div>${defLine}${ex}`;
+      els.flashBack.innerHTML = `<div style="font-size:1.2rem">${esc(h.hun)}</div>${koLine}<span class="big">${esc(h.simp)}</span><div>${esc(h.ko)}</div>${defLine}${ex}${flash.revealed ? hd : ""}`;
     }
+    if (flash.revealed && window.hanziDaily) window.hanziDaily.mountAll(els.flashBack);
   }
   document.getElementById("btn-flash").addEventListener("click", () => openFlash(false));
   const btnToday = document.getElementById("btn-review-today");
@@ -1407,6 +1409,8 @@
     const ex = document.getElementById("quiz-example");
     ex.hidden = true;
     document.getElementById("quiz-next").hidden = true;
+    const quizHd = document.getElementById("quiz-hd");
+    if (quizHd) { quizHd.hidden = true; quizHd.innerHTML = ""; quizHd.dataset.hdFilled = ""; }
     const choicesEl = document.getElementById("quiz-choices");
     const form = document.getElementById("quiz-pinyin-form");
     if (quiz.mode === "pinyin") {
@@ -1443,6 +1447,20 @@
       ex.hidden = false;
       ex.textContent = "예문 · " + item.examples[0];
     }
+    let hdHost = document.getElementById("quiz-hd");
+    if (!hdHost) {
+      hdHost = document.createElement("div");
+      hdHost.id = "quiz-hd";
+      hdHost.className = "hd-mount";
+      const body = document.getElementById("quiz-body");
+      const next = document.getElementById("quiz-next");
+      if (body) body.insertBefore(hdHost, next);
+    }
+    hdHost.dataset.hdText = item.simp || "";
+    hdHost.dataset.hdCompact = "1";
+    hdHost.dataset.hdFilled = "";
+    hdHost.hidden = false;
+    if (window.hanziDaily) window.hanziDaily.mountAll(hdHost);
     document.getElementById("quiz-next").hidden = false;
     renderReviewList();
   }
@@ -1607,7 +1625,8 @@
     if (meta) {
       els.credits.innerHTML = `
         <p>수록 ${meta.stats.unique_chars}자 · 훈음 ${meta.stats.with_hun} · 이름용 글자빈도 ${meta.stats.given_chars_with_freq}</p>
-        <ul>${(meta.sources || []).map((s) => `<li><strong>${esc(s.name)}</strong> — ${esc(s.license)}<br/><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></li>`).join("")}</ul>`;
+        <ul>${(meta.sources || []).map((s) => `<li><strong>${esc(s.name)}</strong> — ${esc(s.license)}<br/><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></li>`).join("")}</ul>
+        <p>한자 카드의 뜻·구성·연결·기억·예단어는 김태만, 『HANZI DAILY — 중국어 한자 1800』의 내용입니다. [연상]은 기억을 돕는 이야기이며 역사적 어원이 아닙니다.</p>`;
     }
   }).catch((err) => {
     console.error(err);

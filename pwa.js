@@ -34,6 +34,9 @@ if ("serviceWorker" in navigator) {
     fetch("data/words.json.gz", { credentials: "same-origin" }).catch(() => {
       fetch("data/words.json", { credentials: "same-origin" }).catch(() => {});
     });
+    fetch("data/hanzidaily.json.gz", { credentials: "same-origin" }).catch(() => {
+      fetch("data/hanzidaily.json", { credentials: "same-origin" }).catch(() => {});
+    });
   }
   const startPrefetch = () => setTimeout(prefetchWords, 4000);
   if (document.readyState === "complete") startPrefetch();

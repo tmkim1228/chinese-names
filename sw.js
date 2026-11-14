@@ -1,10 +1,11 @@
-const CACHE = "name-dictionary-v2.5-20261114";
+const CACHE = "name-dictionary-v2.6-20261114";
 const FILES = [
   "./",
   "./index.html",
   "./srs.js",
   "./app.js",
   "./dictionary.js",
+  "./hanzidaily.js",
   "./document.js",
   "./styles.css",
   "./pwa.js",
@@ -13,6 +14,7 @@ const FILES = [
   "./data/meta.json",
   "./data/dictionary.json",
   "./data/ko-glosses.json",
+  "./data/hanzidaily.json.gz",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/maskable-192.png",
